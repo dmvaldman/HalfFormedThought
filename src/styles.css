@@ -1,0 +1,211 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#root {
+  height: 100vh;
+}
+
+.app {
+  display: flex;
+  height: 100vh;
+  background-color: #1a1a1a;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 250px;
+  background-color: #252525;
+  border-right: 1px solid #333;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-header {
+  padding: 16px 16px 16px 32px;
+  border-bottom: 1px solid #333;
+}
+
+.new-note-button {
+  width: 100%;
+  padding: 12px;
+  background-color: #2a2a2a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #ffffff;
+  font-size: 24px;
+  font-weight: 300;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.new-note-button:hover {
+  background-color: #333;
+}
+
+.notes-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.note-item {
+  padding: 12px 16px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+}
+
+.note-item:hover {
+  background-color: #2a2a2a;
+}
+
+.note-item.active {
+  background-color: #333;
+}
+
+.note-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e0e0e0;
+  font-size: 14px;
+}
+
+.note-item .delete-button {
+  opacity: 0;
+  transition: opacity 0.2s;
+  background: none;
+  border: none;
+  color: #999;
+  font-size: 24px;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.note-item:hover .delete-button {
+  opacity: 1;
+}
+
+.note-item .delete-button:hover {
+  background-color: #444;
+  color: #fff;
+}
+
+/* Note Editor */
+.note-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: #1a1a1a;
+  overflow: hidden;
+}
+
+.note-editor.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.empty-state {
+  color: #666;
+  font-size: 16px;
+}
+
+.note-title-container {
+  padding: 16px 32px 22px;
+  border-bottom: 1px solid #333;
+}
+
+.note-title-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: #ffffff;
+  font-size: 32px;
+  font-weight: 600;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  line-height: 1.4;
+  min-height: 44px;
+  overflow: hidden;
+}
+
+.note-title-input::placeholder {
+  color: #666;
+}
+
+.note-content-container {
+  flex: 1;
+  padding: 24px 32px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.note-content-input {
+  width: 100%;
+  min-height: 100%;
+  background: transparent;
+  border: none;
+  color: #e0e0e0;
+  font-size: 16px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  line-height: 1.6;
+  overflow: hidden;
+}
+
+.note-content-input::placeholder {
+  color: #666;
+}
+
+/* Scrollbar styling */
+.notes-list::-webkit-scrollbar,
+.note-content-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.notes-list::-webkit-scrollbar-track,
+.note-content-container::-webkit-scrollbar-track {
+  background: #1a1a1a;
+}
+
+.notes-list::-webkit-scrollbar-thumb,
+.note-content-container::-webkit-scrollbar-thumb {
+  background: #444;
+  border-radius: 4px;
+}
+
+.notes-list::-webkit-scrollbar-thumb:hover,
+.note-content-container::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
