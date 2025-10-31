@@ -4,18 +4,17 @@ import EditorJS from '@editorjs/editorjs'
 import type { OutputData } from '@editorjs/editorjs'
 // @ts-ignore - Editor.js paragraph tool doesn't have proper TypeScript types
 import Paragraph from '@editorjs/paragraph'
-import { Note, ContentBlock } from './types'
-import AnnotationBar from './AnnotationBar'
+import AnnotationBlock from './AnnotationBlock'
+import { Note } from './types'
 import { createDummyAnnotation } from './annotations'
 
 interface NoteEditorProps {
   note: Note | null
-  onUpdateNote: (noteId: string, title: string, content: ContentBlock[]) => void
+  onUpdateNote: (noteId: string, title: string, content: OutputData) => void
 }
 
 interface NoteEditorState {
   title: string
-  expandedBlocks: Set<number> // Track which annotation bars are expanded
   isAnalyzing: boolean
   editorReady: boolean
 }
@@ -25,7 +24,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   private contentContainerRef: RefObject<HTMLDivElement | null>
   private editorRef: RefObject<HTMLDivElement | null>
   private editorInstance: EditorJS | null = null
-  private lastBlockCount: number = 0
 
   constructor(props: NoteEditorProps) {
     super(props)
@@ -34,7 +32,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     this.editorRef = React.createRef<HTMLDivElement>()
     this.state = {
       title: props.note?.title || '',
-      expandedBlocks: new Set(),
       isAnalyzing: false,
       editorReady: false,
     }
@@ -49,7 +46,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       this.destroyEditor().then(() => {
         this.setState({
           title: this.props.note?.title || '',
-          expandedBlocks: new Set(),
           isAnalyzing: false,
           editorReady: false,
         })
@@ -67,48 +63,21 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     this.destroyEditor()
   }
 
-  convertEditorJSDataToContentBlocks = (editorData: OutputData): ContentBlock[] => {
-    if (!editorData.blocks) return []
-
-    const noteContent = this.props.note?.content || []
-
-    return editorData.blocks.map((block, index) => {
-      // Try to preserve existing annotations if the text matches
-      const existingBlock = noteContent[index]
-      if (existingBlock && block.type === 'paragraph' && existingBlock.text === block.data.text) {
-        return existingBlock
-      }
-
-      return {
-        text: block.type === 'paragraph' ? block.data.text : '',
-        annotations: [],
-      }
-    })
-  }
-
-  convertContentBlocksToEditorJSData = (contentBlocks: ContentBlock[]): OutputData => {
-    return {
-      blocks: contentBlocks.map((block) => ({
-        type: 'paragraph',
-        data: {
-          text: block.text,
-        },
-      })),
-    }
-  }
 
   initializeEditor = async () => {
     if (!this.editorRef.current || !this.props.note) return
 
-    const contentBlocks = this.props.note.content.length > 0
-      ? this.props.note.content
-      : [{ text: '', annotations: [] }]
+    // Ensure any previous instance is destroyed and the container is clean
+    if (this.editorInstance) {
+      await this.destroyEditor()
+    }
 
-    const initialData = this.convertContentBlocksToEditorJSData(contentBlocks)
-    this.lastBlockCount = contentBlocks.length
+    const initialData = this.props.note.content?.blocks
+      ? this.props.note.content
+      : { blocks: [] }
 
     this.editorInstance = new EditorJS({
-      holder: this.editorRef.current,
+      holder: 'editorjs-holder',
       placeholder: 'Start writing...',
       data: initialData,
       tools: {
@@ -116,39 +85,51 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           class: Paragraph as any,
           inlineToolbar: false,
         },
+        annotation: {
+          class: AnnotationBlock as any,
+        },
       },
       onReady: () => {
         this.setState({ editorReady: true })
+        // Attach keydown listener to the editor
+        if (this.editorRef.current) {
+          this.editorRef.current.addEventListener('keydown', this.handleEditorKeyDown)
+        }
       },
       onChange: async (api) => {
         const editorData = await api.saver.save()
-        const contentBlocks = this.convertEditorJSDataToContentBlocks(editorData)
-
-        // Check if a new block was added (trigger analysis)
-        if (editorData.blocks && editorData.blocks.length > this.lastBlockCount) {
-          const newBlockIndex = editorData.blocks.length - 1
-          this.triggerAnalysis(contentBlocks, newBlockIndex)
-          this.lastBlockCount = editorData.blocks.length
-        }
-
         if (this.props.note) {
-          this.props.onUpdateNote(this.props.note.id, this.state.title, contentBlocks)
+          this.props.onUpdateNote(this.props.note.id, this.state.title, editorData)
         }
       },
     })
   }
 
   destroyEditor = async () => {
+    if (this.editorRef.current) {
+      this.editorRef.current.removeEventListener('keydown', this.handleEditorKeyDown)
+    }
     if (this.editorInstance) {
       try {
         await this.editorInstance.isReady
-        if (this.editorInstance && typeof this.editorInstance.destroy === 'function') {
-          this.editorInstance.destroy()
-        }
+        this.editorInstance.destroy()
       } catch (error) {
         console.warn('Editor destroy error:', error)
       }
       this.editorInstance = null
+    }
+  }
+
+  handleEditorKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      // EditorJS has already created the new block, so get the previous one
+      const currentBlockIndex = this.editorInstance?.blocks.getCurrentBlockIndex()
+      if (currentBlockIndex !== undefined && currentBlockIndex > 0) {
+        const previousBlock = this.editorInstance?.blocks.getBlockByIndex(currentBlockIndex - 1)
+        if (previousBlock?.name === 'paragraph' && previousBlock?.id && !previousBlock.isEmpty) {
+          this.triggerAnalysis(previousBlock.id)
+        }
+      }
     }
   }
 
@@ -159,64 +140,45 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     e.target.style.height = `${e.target.scrollHeight}px`
     if (this.props.note && this.editorInstance) {
       this.editorInstance.save().then((editorData) => {
-        const contentBlocks = this.convertEditorJSDataToContentBlocks(editorData)
-        this.props.onUpdateNote(this.props.note!.id, title, contentBlocks)
+        this.props.onUpdateNote(this.props.note!.id, title, editorData)
       })
     }
   }
 
-  triggerAnalysis = async (contentBlocks: ContentBlock[], blockIndex: number) => {
+  triggerAnalysis = async (blockId: string) => {
     this.setState({ isAnalyzing: true })
 
-    // Wait 1 second, then add annotation to the specified block
-    setTimeout(() => {
-      if (this.props.note && blockIndex >= 0 && blockIndex < contentBlocks.length) {
-        const updatedBlocks = [...contentBlocks]
-        updatedBlocks[blockIndex] = {
-          ...updatedBlocks[blockIndex],
-          annotations: [...updatedBlocks[blockIndex].annotations, createDummyAnnotation()],
+    // Wait 1 second, then add annotation after the specified block
+    setTimeout(async () => {
+      if (this.props.note && this.editorInstance && blockId) {
+        const blocks = this.editorInstance.blocks
+
+        // Get the index of the block by its ID
+        const blockIndex = blocks.getBlockIndex(blockId)
+
+        if (blockIndex >= 0) {
+          const newAnnotation = createDummyAnnotation()
+
+          // Insert the annotation block right after this block
+          blocks.insert('annotation', {
+            annotations: [newAnnotation],
+            isExpanded: false,
+          }, {}, blockIndex + 1, true)
+
+          // Save the updated data
+          const updatedData = await this.editorInstance.save()
+          this.props.onUpdateNote(this.props.note!.id, this.state.title, updatedData)
         }
 
-        this.props.onUpdateNote(this.props.note!.id, this.state.title, updatedBlocks)
         this.setState({ isAnalyzing: false })
       }
     }, 1000)
   }
 
-  handleToggleAnnotation = (blockIndex: number) => {
-    // Save scroll position before state update
-    const container = this.contentContainerRef.current
-    const scrollTop = container?.scrollTop || 0
-
-    const expandedBlocks = new Set(this.state.expandedBlocks)
-    if (expandedBlocks.has(blockIndex)) {
-      expandedBlocks.delete(blockIndex)
-    } else {
-      expandedBlocks.add(blockIndex)
-    }
-    this.setState({ expandedBlocks }, () => {
-      // Restore scroll position after state update
-      if (container) {
-        container.scrollTop = scrollTop
-      }
-    })
-  }
-
-  handleDeleteAnnotation = (blockIndex: number, annotationId: string) => {
-    if (!this.props.note) return
-
-    const updatedBlocks = [...this.props.note.content]
-    updatedBlocks[blockIndex] = {
-      ...updatedBlocks[blockIndex],
-      annotations: updatedBlocks[blockIndex].annotations.filter((a) => a.id !== annotationId),
-    }
-
-    this.props.onUpdateNote(this.props.note.id, this.state.title, updatedBlocks)
-  }
 
   render() {
     const { note } = this.props
-    const { title, expandedBlocks, isAnalyzing, editorReady } = this.state
+    const { title, isAnalyzing } = this.state
 
     if (!note) {
       return (
@@ -225,8 +187,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         </div>
       )
     }
-
-    const contentBlocks = note.content.length > 0 ? note.content : [{ text: '', annotations: [] }]
 
     return (
       <div className="note-editor">
@@ -241,18 +201,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           />
         </div>
         <div className="note-content-container" ref={this.contentContainerRef}>
-          <div ref={this.editorRef} className="editorjs-container"></div>
-          {editorReady && contentBlocks.map((block, index) =>
-            block.annotations.length > 0 ? (
-              <AnnotationBar
-                key={index}
-                annotations={block.annotations}
-                isExpanded={expandedBlocks.has(index)}
-                onToggle={() => this.handleToggleAnnotation(index)}
-                onDeleteAnnotation={(annotationId) => this.handleDeleteAnnotation(index, annotationId)}
-              />
-            ) : null
-          )}
+          <div id="editorjs-holder" ref={this.editorRef} className="editorjs-container"></div>
         </div>
         {isAnalyzing && (
           <div className="analysis-spinner">

@@ -3,11 +3,36 @@ import { Note } from './types'
 const STORAGE_KEY = 'half-formed-thought-notes'
 
 function normalizeNote(note: any): Note {
-  // Convert old format (string content) to new format (ContentBlock[])
+  // Convert old format (string content) to EditorJS format
   if (typeof note.content === 'string') {
     return {
       ...note,
-      content: note.content ? [{ text: note.content, annotations: [] }] : [],
+      content: {
+        blocks: note.content ? [{ type: 'paragraph', data: { text: note.content } }] : []
+      },
+    }
+  }
+  // Convert old ContentBlock[] format to EditorJS format
+  if (Array.isArray(note.content)) {
+    const blocks: any[] = []
+    note.content.forEach((block: any) => {
+      blocks.push({
+        type: 'paragraph',
+        data: { text: block.text || '' },
+      })
+      if (block.annotations && block.annotations.length > 0) {
+        blocks.push({
+          type: 'annotation',
+          data: {
+            annotations: block.annotations,
+            isExpanded: false,
+          },
+        })
+      }
+    })
+    return {
+      ...note,
+      content: { blocks },
     }
   }
   return note as Note
