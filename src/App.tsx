@@ -1,7 +1,7 @@
-import React, { Component } from 'react'
+import { Component } from 'react'
 import Sidebar from './Sidebar'
 import NoteEditor from './NoteEditor'
-import { Note } from './types'
+import { Note, ContentBlock } from './types'
 import { loadNotes, saveNotes, generateId } from './storage'
 
 interface AppState {
@@ -28,7 +28,7 @@ class App extends Component<{}, AppState> {
     const newNote: Note = {
       id: generateId(),
       title: '',
-      content: '',
+      content: [],
       createdAt: now,
       updatedAt: now,
     }
@@ -55,7 +55,7 @@ class App extends Component<{}, AppState> {
     saveNotes(updatedNotes)
   }
 
-  handleUpdateNote = (noteId: string, title: string, content: string) => {
+  handleUpdateNote = (noteId: string, title: string, content: ContentBlock[]) => {
     const updatedNotes = this.state.notes.map((note) =>
       note.id === noteId
         ? { ...note, title, content, updatedAt: Date.now() }

@@ -172,7 +172,6 @@ body {
 
 .note-content-input {
   width: 100%;
-  min-height: 100%;
   background: transparent;
   border: none;
   color: #e0e0e0;
@@ -182,6 +181,7 @@ body {
   outline: none;
   line-height: 1.6;
   overflow: hidden;
+  margin-bottom: 8px;
 }
 
 .note-content-input::placeholder {
@@ -208,4 +208,191 @@ body {
 .notes-list::-webkit-scrollbar-thumb:hover,
 .note-content-container::-webkit-scrollbar-thumb:hover {
   background: #555;
+}
+
+/* Editor.js styling */
+.editorjs-container {
+  min-height: 100px;
+}
+
+.codex-editor {
+  background: transparent;
+  color: #e0e0e0;
+}
+
+.codex-editor__redactor {
+  padding: 0;
+}
+
+.ce-block {
+  margin: 16px 0;
+  padding: 0;
+}
+
+.ce-paragraph {
+  color: #e0e0e0;
+  font-size: 16px;
+  line-height: 1.6;
+  font-family: inherit;
+  margin: 0;
+  padding: 0;
+}
+
+.ce-paragraph[data-placeholder]:empty::before {
+  color: #666;
+  opacity: 1;
+}
+
+.ce-toolbar {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.ce-block:hover .ce-toolbar,
+.ce-block--focused .ce-toolbar {
+  opacity: 1;
+}
+
+.ce-toolbar__content,
+.ce-settings {
+  background-color: #252525;
+  border: 1px solid #333;
+}
+
+.ce-toolbar__plus,
+.ce-toolbar__settings-btn {
+  color: #999;
+}
+
+.ce-toolbar__plus:hover,
+.ce-toolbar__settings-btn:hover {
+  color: #fff;
+  background-color: #333;
+}
+
+.ce-inline-toolbar {
+  background-color: #252525;
+  border: 1px solid #333;
+}
+
+.ce-inline-tool {
+  color: #999;
+}
+
+.ce-inline-tool:hover,
+.ce-inline-tool--active {
+  color: #fff;
+  background-color: #333;
+}
+
+/* Annotation Bar */
+.annotation-bar {
+  margin: 8px 0;
+}
+
+.annotation-line {
+  border-top: 1px solid #333;
+  padding: 8px 0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.annotation-line:hover {
+  background-color: #222;
+}
+
+.annotation-line-indicator {
+  color: #666;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.annotation-content {
+  margin-top: 8px;
+  padding: 12px;
+  background-color: #252525;
+  border-radius: 4px;
+}
+
+.annotation-item {
+  position: relative;
+  padding: 8px;
+  margin-bottom: 8px;
+  background-color: #2a2a2a;
+  border-radius: 4px;
+}
+
+.annotation-item:last-child {
+  margin-bottom: 0;
+}
+
+.annotation-markdown {
+  color: #e0e0e0;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.annotation-delete,
+.annotation-drag {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  color: #999;
+  cursor: pointer;
+  font-size: 18px;
+  padding: 4px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.annotation-item:hover .annotation-delete,
+.annotation-item:hover .annotation-drag {
+  opacity: 1;
+}
+
+.annotation-delete:hover {
+  color: #fff;
+}
+
+.annotation-drag {
+  right: 32px;
+  cursor: grab;
+}
+
+.annotation-drag:active {
+  cursor: grabbing;
+}
+
+/* Analysis Spinner */
+.analysis-spinner {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 40px;
+  height: 40px;
+  background-color: #252525;
+  border: 1px solid #333;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.spinner-icon {
+  font-size: 20px;
+  color: #61dafb;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
