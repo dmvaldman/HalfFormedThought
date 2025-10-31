@@ -126,6 +126,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       const currentBlockIndex = this.editorInstance?.blocks.getCurrentBlockIndex()
       if (currentBlockIndex !== undefined && currentBlockIndex > 0) {
         const previousBlock = this.editorInstance?.blocks.getBlockByIndex(currentBlockIndex - 1)
+        // Only trigger for paragraph blocks that have content
         if (previousBlock?.name === 'paragraph' && previousBlock?.id && !previousBlock.isEmpty) {
           this.triggerAnalysis(previousBlock.id)
         }
@@ -163,7 +164,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           blocks.insert('annotation', {
             annotations: [newAnnotation],
             isExpanded: false,
-          }, {}, blockIndex + 1, true)
+          }, {}, blockIndex + 1, false)
 
           // Save the updated data
           const updatedData = await this.editorInstance.save()
