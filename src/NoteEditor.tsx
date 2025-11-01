@@ -19,11 +19,17 @@ interface NoteEditorState {
   editorReady: boolean
 }
 
+interface BlockAnalysisStatus {
+  isDirty: boolean
+  isAnalyzed: boolean
+}
+
 class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   private titleTextareaRef: RefObject<HTMLTextAreaElement | null>
   private contentContainerRef: RefObject<HTMLDivElement | null>
   private editorRef: RefObject<HTMLDivElement | null>
   private editorInstance: EditorJS | null = null
+  private blockAnalysisStatus: Map<string, BlockAnalysisStatus> = new Map()
 
   constructor(props: NoteEditorProps) {
     super(props)
@@ -43,6 +49,9 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
 
   componentDidUpdate(prevProps: NoteEditorProps) {
     if (prevProps.note?.id !== this.props.note?.id) {
+      // Clear analysis status when switching notes
+      this.blockAnalysisStatus.clear()
+
       this.destroyEditor().then(() => {
         this.setState({
           title: this.props.note?.title || '',
@@ -79,6 +88,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     this.editorInstance = new EditorJS({
       holder: 'editorjs-holder',
       placeholder: 'Start writing...',
+      autofocus: true,
       data: initialData,
       tools: {
         paragraph: {
@@ -96,8 +106,31 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           this.editorRef.current.addEventListener('keydown', this.handleEditorKeyDown)
         }
       },
-      onChange: async (api) => {
+      onChange: async (api, event) => {
         const editorData = await api.saver.save()
+
+        // Handle event tracking (event can be single or array)
+        const events = Array.isArray(event) ? event : (event ? [event] : [])
+
+        events.forEach((evt: any) => {
+          // Mark changed blocks as dirty
+          if (evt?.type === 'block-changed' && evt?.detail?.target?.id) {
+            const blockId = evt.detail.target.id
+            const status = this.blockAnalysisStatus.get(blockId)
+            if (status) {
+              status.isDirty = true
+            } else {
+              this.blockAnalysisStatus.set(blockId, { isDirty: true, isAnalyzed: false })
+            }
+          }
+
+          // Track new blocks as dirty and unanalyzed
+          if (evt?.type === 'block-added' && evt?.detail?.target?.id) {
+            const blockId = evt.detail.target.id
+            this.blockAnalysisStatus.set(blockId, { isDirty: true, isAnalyzed: false })
+          }
+        })
+
         if (this.props.note) {
           this.props.onUpdateNote(this.props.note.id, this.state.title, editorData)
         }
@@ -126,9 +159,14 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       const currentBlockIndex = this.editorInstance?.blocks.getCurrentBlockIndex()
       if (currentBlockIndex !== undefined && currentBlockIndex > 0) {
         const previousBlock = this.editorInstance?.blocks.getBlockByIndex(currentBlockIndex - 1)
-        // Only trigger for paragraph blocks that have content
+        // Only trigger for paragraph blocks that have content and need analysis
         if (previousBlock?.name === 'paragraph' && previousBlock?.id && !previousBlock.isEmpty) {
-          this.triggerAnalysis(previousBlock.id)
+          const status = this.blockAnalysisStatus.get(previousBlock.id)
+          const needsAnalysis = !status || status.isDirty || !status.isAnalyzed
+
+          if (needsAnalysis) {
+            this.triggerAnalysis(previousBlock.id)
+          }
         }
       }
     }
@@ -166,6 +204,9 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
             isExpanded: false,
           }, {}, blockIndex + 1, false)
 
+          // Mark the block as analyzed and clean
+          this.blockAnalysisStatus.set(blockId, { isDirty: false, isAnalyzed: true })
+
           // Save the updated data
           const updatedData = await this.editorInstance.save()
           this.props.onUpdateNote(this.props.note!.id, this.state.title, updatedData)
@@ -174,6 +215,59 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         this.setState({ isAnalyzing: false })
       }
     }, 1000)
+  }
+
+  handleAnalyzeAll = async () => {
+    if (!this.editorInstance || !this.props.note) return
+
+    const blocks = this.editorInstance.blocks
+    const blockCount = blocks.getBlocksCount()
+    const blocksToAnalyze: string[] = []
+
+    // Collect all paragraph blocks that need analysis
+    for (let i = 0; i < blockCount; i++) {
+      const block = blocks.getBlockByIndex(i)
+      if (block?.name === 'paragraph' && block?.id && !block.isEmpty) {
+        const status = this.blockAnalysisStatus.get(block.id)
+        const needsAnalysis = !status || status.isDirty || !status.isAnalyzed
+
+        if (needsAnalysis) {
+          blocksToAnalyze.push(block.id)
+        }
+      }
+    }
+
+    // Trigger analysis for each block sequentially
+    for (const blockId of blocksToAnalyze) {
+      await new Promise<void>((resolve) => {
+        this.setState({ isAnalyzing: true })
+
+        setTimeout(async () => {
+          if (this.props.note && this.editorInstance && blockId) {
+            const blocks = this.editorInstance.blocks
+            const blockIndex = blocks.getBlockIndex(blockId)
+
+            if (blockIndex >= 0) {
+              const newAnnotation = createDummyAnnotation()
+
+              blocks.insert('annotation', {
+                annotations: [newAnnotation],
+                isExpanded: false,
+              }, {}, blockIndex + 1, false)
+
+              this.blockAnalysisStatus.set(blockId, { isDirty: false, isAnalyzed: true })
+
+              const updatedData = await this.editorInstance.save()
+              this.props.onUpdateNote(this.props.note!.id, this.state.title, updatedData)
+            }
+          }
+
+          resolve()
+        }, 1000)
+      })
+    }
+
+    this.setState({ isAnalyzing: false })
   }
 
 
@@ -200,6 +294,9 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
             placeholder="Note title..."
             rows={1}
           />
+          <button className="analyze-button" onClick={this.handleAnalyzeAll}>
+            Analyze
+          </button>
         </div>
         <div className="note-content-container" ref={this.contentContainerRef}>
           <div id="editorjs-holder" ref={this.editorRef} className="editorjs-container"></div>
