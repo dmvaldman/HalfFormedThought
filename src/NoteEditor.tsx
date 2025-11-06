@@ -114,7 +114,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
 
     this.editorInstance = new EditorJS({
       holder: 'editorjs-holder',
-      placeholder: 'Start writing...',
+      placeholder: '',
       autofocus: true,
       data: initialData,
       tools: {
