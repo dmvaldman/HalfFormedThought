@@ -8,6 +8,7 @@ import AnnotationBlock from './AnnotationBlock'
 import { Note } from './types'
 import { createAnnotationFromAPI } from './annotations'
 import { analyzeNote, analyzeBlock } from './analyzer'
+import { debounce } from './utils'
 
 interface NoteEditorProps {
   note: Note | null
@@ -25,12 +26,40 @@ interface BlockAnalysisStatus {
   isAnalyzed: boolean
 }
 
+// Override Paragraph's validate method to preserve empty blocks
+const ParagraphWithValidation = class extends (Paragraph as any) {
+  static get toolbox() {
+    return {
+      title: 'Paragraph (Custom)',
+      icon: '¶'
+    }
+  }
+
+  validate() {
+    return true
+  }
+
+  static get pasteConfig() {
+    return {
+      tags: ['P', 'DIV', 'BR']
+    }
+  }
+
+  onPaste(event: any) {
+    const content = event.detail.data
+    if (content.textContent) {
+      this.data = { text: content.textContent }
+    }
+  }
+}
+
 class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   private titleTextareaRef: RefObject<HTMLTextAreaElement | null>
   private contentContainerRef: RefObject<HTMLDivElement | null>
   private editorRef: RefObject<HTMLDivElement | null>
   private editorInstance: EditorJS | null = null
   private blockAnalysisStatus: Map<string, BlockAnalysisStatus> = new Map()
+  private debouncedSave: () => void
 
   constructor(props: NoteEditorProps) {
     super(props)
@@ -42,6 +71,14 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       isAnalyzing: false,
       editorReady: false,
     }
+
+    // Create debounced save function
+    this.debouncedSave = debounce(async () => {
+      if (this.props.note && this.editorInstance) {
+        const editorData = await this.editorInstance.save()
+        this.props.onUpdateNote(this.props.note.id, this.state.title, editorData)
+      }
+    }, 1000)
   }
 
   componentDidMount() {
@@ -86,33 +123,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       ? this.props.note.content
       : { blocks: [] }
 
-    // Override Paragraph's validate method to preserve empty blocks
-    const ParagraphWithValidation = class extends (Paragraph as any) {
-      static get toolbox() {
-        return {
-          title: 'Paragraph (Custom)',
-          icon: '¶'
-        }
-      }
-
-      validate() {
-        return true
-      }
-
-      static get pasteConfig() {
-        return {
-          tags: ['P', 'DIV', 'BR']
-        }
-      }
-
-      onPaste(event: any) {
-        const content = event.detail.data
-        if (content.textContent) {
-          this.data = { text: content.textContent }
-        }
-      }
-    }
-
     this.editorInstance = new EditorJS({
       holder: 'editorjs-holder',
       placeholder: '',
@@ -137,9 +147,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         // Log blocks for analyzer
         // this.logBlocksForAnalyzer()
       },
-      onChange: async (api, event) => {
-        const editorData = await api.saver.save()
-
+      onChange: (_api, event) => {
         // Handle event tracking (event can be single or array)
         const events = Array.isArray(event) ? event : (event ? [event] : [])
 
@@ -162,9 +170,8 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           }
         })
 
-        if (this.props.note) {
-          this.props.onUpdateNote(this.props.note.id, this.state.title, editorData)
-        }
+        // Debounced save
+        this.debouncedSave()
 
         // Log blocks for analyzer
         // this.logBlocksForAnalyzer()
