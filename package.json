@@ -11,6 +11,8 @@
   "dependencies": {
     "@editorjs/editorjs": "^2.31.0",
     "@editorjs/paragraph": "^2.11.7",
+    "dotenv": "^17.2.3",
+    "openai": "^6.8.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

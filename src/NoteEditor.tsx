@@ -85,6 +85,33 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       ? this.props.note.content
       : { blocks: [] }
 
+    // Override Paragraph's validate method to preserve empty blocks
+    const ParagraphWithValidation = class extends (Paragraph as any) {
+      static get toolbox() {
+        return {
+          title: 'Paragraph (Custom)',
+          icon: '¶'
+        }
+      }
+
+      validate() {
+        return true
+      }
+
+      static get pasteConfig() {
+        return {
+          tags: ['P', 'DIV', 'BR']
+        }
+      }
+
+      onPaste(event: any) {
+        const content = event.detail.data
+        if (content.textContent) {
+          this.data = { text: content.textContent }
+        }
+      }
+    }
+
     this.editorInstance = new EditorJS({
       holder: 'editorjs-holder',
       placeholder: 'Start writing...',
@@ -92,7 +119,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       data: initialData,
       tools: {
         paragraph: {
-          class: Paragraph as any,
+          class: ParagraphWithValidation as any,
           inlineToolbar: false,
         },
         annotation: {
@@ -104,7 +131,10 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         // Attach keydown listener to the editor
         if (this.editorRef.current) {
           this.editorRef.current.addEventListener('keydown', this.handleEditorKeyDown)
+          this.editorRef.current.addEventListener('paste', this.handlePaste)
         }
+        // Log blocks for analyzer
+        this.logBlocksForAnalyzer()
       },
       onChange: async (api, event) => {
         const editorData = await api.saver.save()
@@ -134,6 +164,9 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         if (this.props.note) {
           this.props.onUpdateNote(this.props.note.id, this.state.title, editorData)
         }
+
+        // Log blocks for analyzer
+        this.logBlocksForAnalyzer()
       },
     })
   }
@@ -141,6 +174,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   destroyEditor = async () => {
     if (this.editorRef.current) {
       this.editorRef.current.removeEventListener('keydown', this.handleEditorKeyDown)
+      this.editorRef.current.removeEventListener('paste', this.handlePaste)
     }
     if (this.editorInstance) {
       try {
@@ -153,22 +187,85 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     }
   }
 
-  handleEditorKeyDown = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      // EditorJS has already created the new block, so get the previous one
-      const currentBlockIndex = this.editorInstance?.blocks.getCurrentBlockIndex()
-      if (currentBlockIndex !== undefined && currentBlockIndex > 0) {
-        const previousBlock = this.editorInstance?.blocks.getBlockByIndex(currentBlockIndex - 1)
-        // Only trigger for paragraph blocks that have content and need analysis
-        if (previousBlock?.name === 'paragraph' && previousBlock?.id && !previousBlock.isEmpty) {
-          const status = this.blockAnalysisStatus.get(previousBlock.id)
-          const needsAnalysis = !status || status.isDirty || !status.isAnalyzed
+  handleEditorKeyDown = (_event: KeyboardEvent) => {
+    // Let Editor.js handle Enter normally - we'll post-process blocks for analysis
+  }
 
-          if (needsAnalysis) {
-            this.triggerAnalysis(previousBlock.id)
+  handlePaste = async (event: ClipboardEvent) => {
+    event.preventDefault()
+
+    const text = event.clipboardData?.getData('text/plain')
+    if (!text || !this.editorInstance) return
+
+    // Split by line breaks and create blocks for each line (including empty ones)
+    const lines = text.split('\n')
+    const currentBlockIndex = this.editorInstance.blocks.getCurrentBlockIndex()
+
+    // Delete the current block (we'll replace it with pasted content)
+    this.editorInstance.blocks.delete(currentBlockIndex)
+
+    // Insert blocks for each line
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]
+      this.editorInstance.blocks.insert('paragraph', { text: line }, {}, currentBlockIndex + i, i === 0)
+    }
+  }
+
+  collapseBlocks = (editorBlocks: any[]): Array<{id: string, text: string}> => {
+    // Collapse consecutive non-empty paragraph blocks into logical blocks
+    // separated by empty paragraphs
+    const collapsed: Array<{id: string, text: string}> = []
+    let currentText = ''
+    let currentId = ''
+
+    for (let i = 0; i < editorBlocks.length; i++) {
+      const block = editorBlocks[i]
+
+      if (block.type === 'paragraph') {
+        // Strip HTML tags to get plain text
+        const text = block.data.text ? block.data.text.replace(/<[^>]*>/g, '') : ''
+
+        if (text.trim() === '') {
+          // Empty block - finalize current collapsed block if any
+          if (currentText.trim() !== '') {
+            collapsed.push({ id: currentId, text: currentText.trim() })
+            currentText = ''
+            currentId = ''
+          }
+        } else {
+          // Non-empty block - add to current collapsed block
+          if (currentText === '') {
+            currentId = block.id
+            currentText = text
+          } else {
+            currentText += '\n' + text
           }
         }
       }
+    }
+
+    // Don't forget the last block
+    if (currentText.trim() !== '') {
+      collapsed.push({ id: currentId, text: currentText.trim() })
+    }
+
+    return collapsed
+  }
+
+  logBlocksForAnalyzer = async () => {
+    if (!this.editorInstance) return
+
+    try {
+      const editorData = await this.editorInstance.save()
+      const paragraphBlocks = editorData.blocks.filter((block: any) => block.type === 'paragraph')
+      const blocksForAnalyzer = this.collapseBlocks(paragraphBlocks)
+
+      if (blocksForAnalyzer.length > 0) {
+        console.log('Blocks for analyzer:')
+        console.log(JSON.stringify(blocksForAnalyzer, null, 2))
+      }
+    } catch (error) {
+      // Silently fail if editor isn't ready
     }
   }
 

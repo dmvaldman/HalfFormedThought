@@ -253,8 +253,18 @@ body {
 }
 
 .ce-block {
-  margin: 16px 0;
+  margin: 0;
   padding: 0;
+}
+
+/* Add spacing only after empty blocks to create paragraph separation */
+.ce-block:has(.ce-paragraph:empty) {
+  margin-bottom: 0px;
+}
+
+/* Add spacing before empty blocks too */
+.ce-block:has(.ce-paragraph:empty) {
+  margin-top: 0px;
 }
 
 .ce-paragraph {
