@@ -10,17 +10,18 @@ const together = new Together({
 
 const SYSTEM_PROMPT = `
 You are a brilliant lateral thinker. A student of history, science, mathematics, philosophy and art.
-You think in multi-disciplinary analogies, finding shocking insights in the long tail of human thought.
+You think in multi-disciplinary analogies, finding provocative insights in the long tail of human thought.
 `.trim();
 
 const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
-Research these ideas and provide places to extend/elaborate on them.
+Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
 Form your response as JSON with replies to each section of the essay {block_id: annotations}.
-where annotations is either an empty array (if the text is not a good candidate for an annotation) or an array of {description, relevance, source} (all fields are optional):
+where annotations is an array (0-3 in length) of {description, relevance, source, domain} (all fields are optional):
 - \`description\` is a short summary of the source (0-4 sentences)
 - \`relevance\` is why this source is relevant to the text block (0-4 sentences)
-- \`source\` is the name of the source (person name, book title, essay title, etc)
+- \`source\` is the name of the source (person name, book title, essay title, etc).
+- \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
 An annotation is a unique expansion on the essay's theme relative to the text block
 `.trim();
 
