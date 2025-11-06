@@ -76,6 +76,117 @@ function tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks) {
   return null;
 }
 
+function logPrompt(title, userPrompt) {
+  console.log(`${title}\n`);
+  console.log('System prompt:', SYSTEM_PROMPT);
+  console.log('\nUser prompt:');
+  console.log(userPrompt);
+  console.log('\n' + '='.repeat(80) + '\n');
+}
+
+async function callTogetherAPI(userPrompt, onStreamChunk = null) {
+  const stream = await together.chat.completions.create({
+    model: model,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.6,
+    response_format: { type: 'json_object' },
+    stream: true
+  });
+
+  let fullResponse = '';
+  let currentBuffer = '';
+
+  console.log('Streaming response:');
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || '';
+    if (content) {
+      fullResponse += content;
+      currentBuffer += content;
+      if (onStreamChunk) {
+        onStreamChunk(currentBuffer);
+      }
+    }
+  }
+
+  console.log('\n'); // New line after stream completes
+
+  // Parse the response
+  let cleanedResponse = fullResponse.trim();
+
+  const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
+  if (jsonMatch) {
+    cleanedResponse = jsonMatch[1].trim();
+  }
+
+  try {
+    const parsed = JSON.parse(cleanedResponse);
+    return parsed;
+  } catch (parseError) {
+    try {
+      const repaired = jsonrepair(cleanedResponse);
+      const parsed = JSON.parse(repaired);
+      return parsed;
+    } catch (repairError) {
+      console.error('\nFailed to parse or repair JSON response:');
+      console.error('Full response:');
+      console.log(cleanedResponse);
+      throw parseError;
+    }
+  }
+}
+
+async function analyzeBlock(blocks, currentBlock, existingAnnotations = []) {
+  // Format all blocks as context
+  const blocksText = blocks
+    .map(block => {
+      const textWithBreaks = block.text.replace(/\\n/g, '\n')
+      return `block_id: ${block.id}\n${textWithBreaks}`
+    })
+    .join('\n\n');
+
+  // Format existing annotations if provided
+  let existingSourcesNote = '';
+  if (existingAnnotations && existingAnnotations.length > 0) {
+    const sources = existingAnnotations
+      .map(ann => ann.source)
+      .filter(Boolean)
+      .join(', ');
+    if (sources) {
+      existingSourcesNote = `\n\nNote: The following sources have already been provided for this block: ${sources}. Please provide annotations from different sources.`;
+    }
+  }
+
+  const userPrompt = `
+Here are some notes (very rough) about an essay I'm writing.
+Research the ideas and provide places to extend/elaborate on them from a diversity of perspectives.
+Focus specifically on this block:
+
+block_id: ${currentBlock.id}
+${currentBlock.text.replace(/\\n/g, '\n')}
+
+Form your response as JSON with an array of annotations: {annotations: [...]}
+where annotations is an array (0-3 in length) of {description, relevance, source, domain} (all fields are optional):
+- \`description\` is a short summary of the source (0-4 sentences)
+- \`relevance\` is why this source is relevant to the text block (0-4 sentences)
+- \`source\` is the name of the source (person name, book title, essay title, etc).
+- \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
+An annotation is a unique expansion on the essay's theme relative to the text block${existingSourcesNote}
+`.trim();
+
+  logPrompt('Sending to model for single block analysis:', userPrompt);
+
+  try {
+    const parsed = await callTogetherAPI(userPrompt);
+    return parsed.annotations || [];
+  } catch (error) {
+    console.error('Error calling Together API:', error);
+    throw error;
+  }
+}
+
 async function analyzeNote(blocks) {
   // Format blocks as text with line breaks
   const blocksText = blocks
@@ -88,11 +199,7 @@ async function analyzeNote(blocks) {
 
   const userPrompt = `${USER_PROMPT_PREAMBLE}\n\n${blocksText}`;
 
-  console.log('Sending to model:\n');
-  console.log('System prompt:', SYSTEM_PROMPT);
-  console.log('\nUser prompt:');
-  console.log(userPrompt);
-  console.log('\n' + '='.repeat(80) + '\n');
+  logPrompt('Sending to model:', userPrompt);
 
   // Track block IDs we're expecting
   const blockIds = blocks.map(b => b.id);
@@ -100,45 +207,20 @@ async function analyzeNote(blocks) {
   const parsedBlocks = {};
 
   try {
-    const stream = await together.chat.completions.create({
-      model: model,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt }
-      ],
-      temperature: 0.6,
-      response_format: { type: 'json_object' },
-      stream: true
+    const parsed = await callTogetherAPI(userPrompt, (currentBuffer) => {
+      // Try to extract complete blocks as they arrive
+      const completedBlock = tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks);
+
+      if (completedBlock) {
+        console.log(`\n\n✓ Complete block: ${completedBlock.blockId}`);
+        console.log(JSON.stringify(completedBlock.parsed, null, 2));
+        completedBlocks.add(completedBlock.blockId);
+        parsedBlocks[completedBlock.blockId] = completedBlock.parsed[completedBlock.blockId];
+      }
     });
 
-    let fullResponse = '';
-    let currentBuffer = '';
-
-    console.log('Streaming response:');
-    for await (const chunk of stream) {
-      const content = chunk.choices[0]?.delta?.content || '';
-      if (content) {
-        fullResponse += content;
-        currentBuffer += content;
-        // Write without newline so it appends to the same line (streaming effect)
-        // process.stdout.write(content);
-
-        // Try to extract complete blocks as they arrive
-        const completedBlock = tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks);
-
-        if (completedBlock) {
-          console.log(`\n\n✓ Complete block: ${completedBlock.blockId}`);
-          console.log(JSON.stringify(completedBlock.parsed, null, 2));
-          completedBlocks.add(completedBlock.blockId);
-          parsedBlocks[completedBlock.blockId] = completedBlock.parsed[completedBlock.blockId];
-        }
-      }
-    }
-
-    console.log('\n'); // New line after stream completes
-
-    // Return the parsed blocks we collected during streaming
-    return parsedBlocks;
+    // Return the parsed blocks we collected during streaming, or fallback to full parsed response
+    return Object.keys(parsedBlocks).length > 0 ? parsedBlocks : parsed;
   } catch (error) {
     console.error('Error calling Together API:', error);
     throw error;
@@ -210,15 +292,41 @@ const sampleBlocks = [
 ]
 
 async function main() {
-  console.log('Testing analyzer with sample data...\n');
-  console.log('Calling Together API...\n');
+  // Test analyzeBlock with the first block (no existing annotations)
+  console.log('Testing analyzeBlock (no existing annotations)...\n');
+  let firstAnnotations = [];
+  try {
+    const firstBlock = sampleBlocks[0];
+    firstAnnotations = await analyzeBlock(sampleBlocks, firstBlock);
+    console.log('\nAnalyzeBlock result:');
+    console.log(JSON.stringify(firstAnnotations, null, 2));
+  } catch (error) {
+    console.error('analyzeBlock failed:', error.message);
+  }
 
+  console.log('\n' + '='.repeat(80) + '\n');
+
+  // Test analyzeBlock with existing annotations from previous call
+  console.log('Testing analyzeBlock (with existing annotations)...\n');
+  try {
+    const firstBlock = sampleBlocks[0];
+    const annotations = await analyzeBlock(sampleBlocks, firstBlock, firstAnnotations);
+    console.log('\nAnalyzeBlock result (should have different sources):');
+    console.log(JSON.stringify(annotations, null, 2));
+  } catch (error) {
+    console.error('analyzeBlock with existing annotations failed:', error.message);
+  }
+
+  console.log('\n' + '='.repeat(80) + '\n');
+
+  // Test analyzeNote
+  console.log('Testing analyzeNote...\n');
   try {
     const result = await analyzeNote(sampleBlocks);
-    console.log('Analysis result:');
+    console.log('\nAnalyzeNote result:');
     console.log(JSON.stringify(result, null, 2));
   } catch (error) {
-    console.error('Failed:', error.message);
+    console.error('analyzeNote failed:', error.message);
   }
 }
 
