@@ -160,6 +160,7 @@ export async function analyzeNote(blocks: Array<{ id: string; text: string }>): 
 }
 
 export async function analyzeBlock(
+  allBlocks: Array<{ id: string; text: string }>,
   currentBlock: { id: string; text: string },
   existingAnnotations: Annotation[] = []
 ): Promise<Annotation[]> {
@@ -174,9 +175,20 @@ export async function analyzeBlock(
     }
   }
 
+  // Format all blocks as context
+  const allBlocksText = allBlocks
+    .map(block => {
+      const textWithBreaks = block.text.replace(/\\n/g, '\n')
+      return `block_id: ${block.id}\n${textWithBreaks}`
+    })
+    .join('\n\n')
+
   const userPrompt = `
 Here are some notes (very rough) about an essay I'm writing.
 Research the ideas and provide places to extend/elaborate on them from a diversity of perspectives.
+
+${allBlocksText}
+
 Focus specifically on this block:
 
 block_id: ${currentBlock.id}

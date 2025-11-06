@@ -9,12 +9,14 @@ interface AnnotationBlockData {
 class AnnotationBlock {
   private data: AnnotationBlockData
   private wrapper: HTMLElement | null = null
+  private api: any
 
-  constructor({ data }: any) {
+  constructor({ data, api }: any) {
     this.data = {
       annotations: data.annotations || [],
       isExpanded: data.isExpanded || false,
     }
+    this.api = api
   }
 
   static get toolbox() {
@@ -83,6 +85,20 @@ class AnnotationBlock {
 
   deleteAnnotation(annotationId: string) {
     this.data.annotations = this.data.annotations.filter((a) => a.id !== annotationId)
+
+    // If no annotations left, delete the block
+    if (this.data.annotations.length === 0 && this.api && this.api.blocks) {
+      // Find this block's index by checking which block contains our wrapper
+      const blockCount = this.api.blocks.getBlocksCount()
+      for (let i = 0; i < blockCount; i++) {
+        const block = this.api.blocks.getBlockByIndex(i)
+        if (block && block.holder && block.holder.contains(this.wrapper)) {
+          this.api.blocks.delete(i)
+          return
+        }
+      }
+    }
+
     this.render()
   }
 

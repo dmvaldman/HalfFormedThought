@@ -192,71 +192,63 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     // Trigger analysis when Enter is pressed and a new paragraph block is created
     if (event.key === 'Enter' && this.editorInstance) {
       // Wait a bit for Editor.js to process the Enter key
-      setTimeout(async () => {
-        debugger;
-        if (!this.editorInstance) return
+      if (!this.editorInstance) return
 
-        const editorData = await this.editorInstance.save()
+      const editorData = await this.editorInstance.save()
 
-        const blocks = this.editorInstance.blocks
-        const currentBlockIndex = blocks.getCurrentBlockIndex()
+      const blocks = this.editorInstance.blocks
+      const currentBlockIndex = blocks.getCurrentBlockIndex()
 
-        // Get the previous block (the one we just left)
-        if (currentBlockIndex > 2) {
-          const previousBlock = blocks.getBlockByIndex(currentBlockIndex - 1)
-          const previousPreviousBlock = blocks.getBlockByIndex(currentBlockIndex - 2)
+      // Get the previous block (the one we just left)
+      if (currentBlockIndex > 2) {
+        const previousBlock = blocks.getBlockByIndex(currentBlockIndex - 1)
+        const previousPreviousBlock = blocks.getBlockByIndex(currentBlockIndex - 2)
 
-          // Get the block data from saved editor data for debugging
-          const previousBlockData = editorData.blocks.find((b: any) => b.id === previousBlock?.id)
-          const previousPreviousBlockData = editorData.blocks.find((b: any) => b.id === previousPreviousBlock?.id)
+        // Get the block data from saved editor data for debugging
+        const previousBlockData = editorData.blocks.find((b: any) => b.id === previousBlock?.id)
+        const previousPreviousBlockData = editorData.blocks.find((b: any) => b.id === previousPreviousBlock?.id)
 
-          console.log('Previous block (from Blocks API):', {
-            id: previousBlock?.id,
-            name: previousBlock?.name,
-            isEmpty: previousBlock?.isEmpty
-          })
-          console.log('Previous block (from editorData):', {
-            id: previousBlockData?.id,
-            type: previousBlockData?.type,
-            text: previousBlockData?.data?.text
-          })
-          console.log('Previous previous block (from editorData):', {
-            id: previousPreviousBlockData?.id,
-            type: previousPreviousBlockData?.type,
-            text: previousPreviousBlockData?.data?.text
-          })
+        console.log('Previous block:', {
+          id: previousBlockData?.id,
+          type: previousBlockData?.type,
+          text: previousBlockData?.data?.text
+        })
 
-          // Only analyze if it's a paragraph block that's empty and the previous block is not empty
-          if (previousPreviousBlock?.name === 'paragraph' && previousPreviousBlock?.id && !previousPreviousBlock?.isEmpty) {
-            // Find which collapsed block contains this previous block
-            const paragraphBlocks = editorData.blocks.filter((block: any) => block.type === 'paragraph')
-            const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
+        console.log('Previous previous block:', {
+          id: previousPreviousBlockData?.id,
+          type: previousPreviousBlockData?.type,
+          text: previousPreviousBlockData?.data?.text
+        })
 
-            // Find the collapsed block that contains the previous block's ID
-            const collapsedBlock = collapsedBlocks.find(cb =>
-              cb.collapsedIds.includes(previousPreviousBlock.id)
-            )
+        // Only analyze if it's a paragraph block that's empty and the previous block is not empty
+        if (previousPreviousBlock?.name === 'paragraph' && previousBlock?.isEmpty && !previousPreviousBlock?.isEmpty) {
+          // Find which collapsed block contains this previous block
+          const paragraphBlocks = editorData.blocks.filter((block: any) => block.type === 'paragraph')
+          const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
 
-            console.log('Collapsed block containing previous block:', collapsedBlock)
+          // Find the collapsed block that contains the previous block's ID
+          const collapsedBlock = collapsedBlocks.find(cb =>
+            cb.collapsedIds.includes(previousPreviousBlock.id)
+          )
 
-            if (collapsedBlock) {
-              const collapsedBlockId = collapsedBlock.id
-              const status = this.blockAnalysisStatus.get(collapsedBlockId)
-              const needsAnalysis = !status || status.isDirty || !status.isAnalyzed
+          console.log('Collapsed block containing previous block:', collapsedBlock)
 
-              // TODO: dirty checking immplement later
+          if (collapsedBlock) {
+            const collapsedBlockId = collapsedBlock.id
+            const status = this.blockAnalysisStatus.get(collapsedBlockId)
+            const needsAnalysis = !status || status.isDirty || !status.isAnalyzed
 
-              debugger;
-              if (needsAnalysis) {
-                await this.triggerAnalysis(collapsedBlockId)
-              }
-              else {
-                await this.triggerAnalysis(collapsedBlockId)
-              }
+            // TODO: dirty checking immplement later
+
+            if (needsAnalysis) {
+              await this.triggerAnalysis(collapsedBlockId)
+            }
+            else {
+              await this.triggerAnalysis(collapsedBlockId)
             }
           }
         }
-      }, 100)
+      }
     }
   }
 
@@ -404,7 +396,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       }
 
       // Call analyzeBlock
-      const apiAnnotations = await analyzeBlock(currentBlock, existingAnnotations)
+      const apiAnnotations = await analyzeBlock(collapsedBlocks, currentBlock, existingAnnotations)
 
       if (apiAnnotations.length > 0) {
         const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
