@@ -1,4 +1,5 @@
 import { Annotation } from './types'
+import { formatAnnotationAsMarkdown } from './annotations'
 
 interface AnnotationBlockData {
   annotations: Annotation[]
@@ -57,7 +58,7 @@ class AnnotationBlock {
 
         const markdown = document.createElement('div')
         markdown.classList.add('annotation-markdown')
-        markdown.textContent = annotation.content
+        markdown.textContent = formatAnnotationAsMarkdown(annotation)
         item.appendChild(markdown)
 
         const deleteBtn = document.createElement('button')

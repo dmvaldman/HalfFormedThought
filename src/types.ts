@@ -1,6 +1,9 @@
 export interface Annotation {
   id: string
-  content: string // Markdown string that can contain url, image, text, video
+  description?: string
+  relevance?: string
+  source?: string
+  domain?: string
 }
 
 export interface Note {
