@@ -1,11 +1,11 @@
-import OpenAI from 'openai';
+import Together from 'together-ai';
 import dotenv from 'dotenv';
+import { jsonrepair } from 'jsonrepair';
 
 dotenv.config();
 
-const client = new OpenAI({
-  apiKey: process.env.MOONSHOT_API_KEY,
-  baseURL: 'https://api.moonshot.ai/v1',
+const together = new Together({
+  apiKey: process.env.TOGETHER_API_KEY,
 });
 
 const SYSTEM_PROMPT = `
@@ -16,38 +16,130 @@ You think in multi-disciplinary analogies, finding shocking insights in the long
 const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
 Research these ideas and provide places to extend/elaborate on them.
-Form your response as JSON with replies to certain each section of the essay {block_id, annotations}
-where annotations is either an empty array (if the text is not a good candidate for an annotation) or an array of {description, quote} (all fields are optional).
+Form your response as JSON with replies to each section of the essay {block_id: annotations}.
+where annotations is either an empty array (if the text is not a good candidate for an annotation) or an array of {description, relevance, source} (all fields are optional):
+- \`description\` is a short summary of the source (0-4 sentences)
+- \`relevance\` is why this source is relevant to the text block (0-4 sentences)
+- \`source\` is the name of the source (person name, book title, essay title, etc)
 An annotation is a unique expansion on the essay's theme relative to the text block
 `.trim();
 
-const model = 'kimi-k2-0905-preview';
+const model = 'moonshotai/Kimi-K2-Instruct-0905';
+
+function tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks) {
+  // Check blocks in order, return the most recent one that just completed
+  for (let i = 0; i < blockIds.length; i++) {
+    const blockId = blockIds[i];
+    if (completedBlocks.has(blockId)) continue;
+
+    // Look for this block_id - search for "blockId": pattern
+    // Account for whitespace/newlines between quote and block ID (e.g. "\nCipfvdLQCd":)
+    const escapedBlockId = blockId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const blockPattern = new RegExp(`"\\s*${escapedBlockId}"\\s*:`);
+    const startMatch = currentBuffer.match(blockPattern);
+
+    if (!startMatch) continue;
+
+    const startIndex = startMatch.index + startMatch[0].length;
+    const nextBlockId = blockIds[i + 1];
+
+    // Find the end - either next block_id or end of response
+    let endIndex = currentBuffer.length;
+    if (nextBlockId) {
+      const escapedNextBlockId = nextBlockId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nextPattern = new RegExp(`"\\s*${escapedNextBlockId}"\\s*:`);
+      const nextMatch = currentBuffer.match(nextPattern);
+      if (nextMatch) {
+        endIndex = nextMatch.index;
+      }
+    }
+
+    // Extract the content between block_ids
+    const blockContent = currentBuffer.substring(startIndex, endIndex).trim();
+
+    // Try to parse it as a complete block entry
+    if (blockContent && (blockContent.endsWith(']') || blockContent.endsWith('],'))) {
+      try {
+        // Wrap in JSON object
+        const blockEntry = `{"${blockId}":${blockContent.replace(/,$/, '')}}`;
+        const repaired = jsonrepair(blockEntry);
+        const parsed = JSON.parse(repaired);
+
+        return { blockId, parsed };
+      } catch (e) {
+        // Not parseable yet, might be incomplete
+      }
+    }
+  }
+
+  return null;
+}
 
 async function analyzeNote(blocks) {
-  // Format blocks as text
+  // Format blocks as text with line breaks
   const blocksText = blocks
-    .map(block => `block_id: ${block.id}\ntext: ${block.text}`)
+    .map(block => {
+      // Convert \n to actual line breaks in the text
+      const textWithBreaks = block.text.replace(/\\n/g, '\n')
+      return `block_id: ${block.id}\n${textWithBreaks}`
+    })
     .join('\n\n');
 
   const userPrompt = `${USER_PROMPT_PREAMBLE}\n\n${blocksText}`;
 
+  console.log('Sending to model:\n');
+  console.log('System prompt:', SYSTEM_PROMPT);
+  console.log('\nUser prompt:');
+  console.log(userPrompt);
+  console.log('\n' + '='.repeat(80) + '\n');
+
+  // Track block IDs we're expecting
+  const blockIds = blocks.map(b => b.id);
+  const completedBlocks = new Set();
+  const parsedBlocks = {};
+
   try {
-    const completion = await client.chat.completions.create({
+    const stream = await together.chat.completions.create({
       model: model,
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt }
       ],
       temperature: 0.6,
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
+      stream: true
     });
 
-    const response = completion.choices[0].message.content;
-    const parsed = JSON.parse(response);
+    let fullResponse = '';
+    let currentBuffer = '';
 
-    return parsed;
+    console.log('Streaming response:');
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content || '';
+      if (content) {
+        fullResponse += content;
+        currentBuffer += content;
+        // Write without newline so it appends to the same line (streaming effect)
+        // process.stdout.write(content);
+
+        // Try to extract complete blocks as they arrive
+        const completedBlock = tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks);
+
+        if (completedBlock) {
+          console.log(`\n\n✓ Complete block: ${completedBlock.blockId}`);
+          console.log(JSON.stringify(completedBlock.parsed, null, 2));
+          completedBlocks.add(completedBlock.blockId);
+          parsedBlocks[completedBlock.blockId] = completedBlock.parsed[completedBlock.blockId];
+        }
+      }
+    }
+
+    console.log('\n'); // New line after stream completes
+
+    // Return the parsed blocks we collected during streaming
+    return parsedBlocks;
   } catch (error) {
-    console.error('Error calling Kimi API:', error);
+    console.error('Error calling Together API:', error);
     throw error;
   }
 }
@@ -118,9 +210,7 @@ const sampleBlocks = [
 
 async function main() {
   console.log('Testing analyzer with sample data...\n');
-  console.log('Input blocks:');
-  console.log(JSON.stringify(sampleBlocks, null, 2));
-  console.log('\nCalling Kimi API...\n');
+  console.log('Calling Together API...\n');
 
   try {
     const result = await analyzeNote(sampleBlocks);
