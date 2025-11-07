@@ -1,25 +1,17 @@
 import React, { Component, RefObject } from 'react'
-// @ts-ignore - Editor.js doesn't have proper TypeScript types
-import EditorJS from '@editorjs/editorjs'
-import type { OutputData } from '@editorjs/editorjs'
-// @ts-ignore - Editor.js paragraph tool doesn't have proper TypeScript types
-import Paragraph from '@editorjs/paragraph'
-import AnnotationBlock from './AnnotationBlock'
 import BlockNoteWrapper, { BlockNoteWrapperHandle } from './BlockNoteWrapper'
 import { Note } from './types'
 import { createAnnotationFromAPI } from './annotations'
 import { analyzeNote, analyzeBlock } from './analyzer'
-import { debounce } from './utils'
 
 interface NoteEditorProps {
   note: Note | null
-  onUpdateNote: (noteId: string, title: string, content: OutputData) => void
+  onUpdateNote: (noteId: string, title: string, content: any) => void
 }
 
 interface NoteEditorState {
   title: string
   isAnalyzing: boolean
-  editorReady: boolean
 }
 
 interface BlockAnalysisStatus {
@@ -27,40 +19,10 @@ interface BlockAnalysisStatus {
   isAnalyzed: boolean
 }
 
-// Override Paragraph's validate method to preserve empty blocks
-const ParagraphWithValidation = class extends (Paragraph as any) {
-  static get toolbox() {
-    return {
-      title: 'Paragraph (Custom)',
-      icon: '¶'
-    }
-  }
-
-  validate() {
-    return true
-  }
-
-  static get pasteConfig() {
-    return {
-      tags: ['P', 'DIV', 'BR']
-    }
-  }
-
-  onPaste(event: any) {
-    const content = event.detail.data
-    if (content.textContent) {
-      this.data = { text: content.textContent }
-    }
-  }
-}
-
 class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   private titleTextareaRef: RefObject<HTMLTextAreaElement | null>
   private contentContainerRef: RefObject<HTMLDivElement | null>
-  private editorRef: RefObject<HTMLDivElement | null>
-  private editorInstance: EditorJS | null = null
   private blockAnalysisStatus: Map<string, BlockAnalysisStatus> = new Map()
-  private debouncedSave: () => void
   private blockNoteRef = React.createRef<BlockNoteWrapperHandle>()
   private lastBlockNoteDoc: any = null
 
@@ -68,38 +30,19 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     super(props)
     this.titleTextareaRef = React.createRef<HTMLTextAreaElement>()
     this.contentContainerRef = React.createRef<HTMLDivElement>()
-    this.editorRef = React.createRef<HTMLDivElement>()
     this.state = {
       title: props.note?.title || '',
       isAnalyzing: false,
-      editorReady: false,
     }
-
-    // Create debounced save function
-    this.debouncedSave = debounce(async () => {
-      if (this.props.note && this.editorInstance) {
-        const editorData = await this.editorInstance.save()
-        this.props.onUpdateNote(this.props.note.id, this.state.title, editorData)
-      }
-    }, 1000)
-  }
-
-  componentDidMount() {
-    this.initializeEditor()
   }
 
   componentDidUpdate(prevProps: NoteEditorProps) {
     if (prevProps.note?.id !== this.props.note?.id) {
       // Clear analysis status when switching notes
       this.blockAnalysisStatus.clear()
-
-      this.destroyEditor().then(() => {
-        this.setState({
-          title: this.props.note?.title || '',
-          isAnalyzing: false,
-          editorReady: false,
-        })
-        this.initializeEditor()
+      this.setState({
+        title: this.props.note?.title || '',
+        isAnalyzing: false,
       })
     }
 
@@ -109,182 +52,25 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     }
   }
 
-  componentWillUnmount() {
-    this.destroyEditor()
-  }
-
-
-  initializeEditor = async () => {
-    if (!this.editorRef.current || !this.props.note) return
-
-    // Ensure any previous instance is destroyed and the container is clean
-    if (this.editorInstance) {
-      await this.destroyEditor()
+  getText = (block: any): string => {
+    // Extract text from BlockNote format: block.content is an array of inline content
+    if (!block || !Array.isArray(block.content)) {
+      return ''
     }
-
-    const initialData = this.props.note.content?.blocks
-      ? this.props.note.content
-      : { blocks: [] }
-
-    this.editorInstance = new EditorJS({
-      holder: 'editorjs-holder',
-      placeholder: '',
-      autofocus: true,
-      data: initialData,
-      tools: {
-        paragraph: {
-          class: ParagraphWithValidation as any,
-          inlineToolbar: false,
-        },
-        annotation: {
-          class: AnnotationBlock as any,
-        },
-      },
-      onReady: () => {
-        this.setState({ editorReady: true })
-        // Attach keydown listener to the editor
-        if (this.editorRef.current) {
-          this.editorRef.current.addEventListener('keydown', this.handleEditorKeyDown)
-          this.editorRef.current.addEventListener('paste', this.handlePaste)
+    return block.content
+      .map((item: any) => {
+        if (item.type === 'text' && item.text) {
+          return item.text
         }
-        // Log blocks for analyzer
-        // this.logBlocksForAnalyzer()
-      },
-      onChange: (_api, event) => {
-        // Handle event tracking (event can be single or array)
-        const events = Array.isArray(event) ? event : (event ? [event] : [])
-
-        events.forEach((evt: any) => {
-          // Mark changed blocks as dirty
-          if (evt?.type === 'block-changed' && evt?.detail?.target?.id) {
-            const blockId = evt.detail.target.id
-            const status = this.blockAnalysisStatus.get(blockId)
-            if (status) {
-              status.isDirty = true
-            } else {
-              this.blockAnalysisStatus.set(blockId, { isDirty: true, isAnalyzed: false })
-            }
-          }
-
-          // Track new blocks as dirty and unanalyzed
-          if (evt?.type === 'block-added' && evt?.detail?.target?.id) {
-            const blockId = evt.detail.target.id
-            this.blockAnalysisStatus.set(blockId, { isDirty: true, isAnalyzed: false })
-          }
-        })
-
-        // Debounced save
-        this.debouncedSave()
-
-        // Log blocks for analyzer
-        // this.logBlocksForAnalyzer()
-      },
-    })
-  }
-
-  destroyEditor = async () => {
-    if (this.editorRef.current) {
-      this.editorRef.current.removeEventListener('keydown', this.handleEditorKeyDown)
-      this.editorRef.current.removeEventListener('paste', this.handlePaste)
-    }
-    if (this.editorInstance) {
-      try {
-        await this.editorInstance.isReady
-        this.editorInstance.destroy()
-      } catch (error) {
-        console.warn('Editor destroy error:', error)
-      }
-      this.editorInstance = null
-    }
-  }
-
-  handleEditorKeyDown = async (event: KeyboardEvent) => {
-    // Trigger analysis when Enter is pressed and a new paragraph block is created
-    if (event.key === 'Enter' && this.editorInstance) {
-      // Wait a bit for Editor.js to process the Enter key
-      if (!this.editorInstance) return
-
-      const editorData = await this.editorInstance.save()
-
-      const blocks = this.editorInstance.blocks
-      const currentBlockIndex = blocks.getCurrentBlockIndex()
-
-      // Get the previous block (the one we just left)
-      if (currentBlockIndex > 2) {
-        const previousBlock = blocks.getBlockByIndex(currentBlockIndex - 1)
-        const previousPreviousBlock = blocks.getBlockByIndex(currentBlockIndex - 2)
-
-        // Get the block data from saved editor data for debugging
-        const previousBlockData = editorData.blocks.find((b: any) => b.id === previousBlock?.id)
-        const previousPreviousBlockData = editorData.blocks.find((b: any) => b.id === previousPreviousBlock?.id)
-
-        console.log('Previous block:', {
-          id: previousBlockData?.id,
-          type: previousBlockData?.type,
-          text: previousBlockData?.data?.text
-        })
-
-        console.log('Previous previous block:', {
-          id: previousPreviousBlockData?.id,
-          type: previousPreviousBlockData?.type,
-          text: previousPreviousBlockData?.data?.text
-        })
-
-        // Only analyze if it's a paragraph block that's empty and the previous block is not empty
-        if (previousPreviousBlock?.name === 'paragraph' && previousBlock?.isEmpty && !previousPreviousBlock?.isEmpty) {
-          // Find which collapsed block contains this previous block
-          const paragraphBlocks = editorData.blocks.filter((block: any) => block.type === 'paragraph')
-          const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
-
-          // Find the collapsed block that contains the previous block's ID
-          const collapsedBlock = collapsedBlocks.find(cb =>
-            cb.collapsedIds.includes(previousPreviousBlock.id)
-          )
-
-          console.log('Collapsed block containing previous block:', collapsedBlock)
-
-          if (collapsedBlock) {
-            const collapsedBlockId = collapsedBlock.id
-            const status = this.blockAnalysisStatus.get(collapsedBlockId)
-            const needsAnalysis = !status || status.isDirty || !status.isAnalyzed
-
-            // TODO: dirty checking immplement later
-
-            if (needsAnalysis) {
-              await this.triggerAnalysis(collapsedBlockId)
-            }
-            else {
-              await this.triggerAnalysis(collapsedBlockId)
-            }
-          }
-        }
-      }
-    }
-  }
-
-  handlePaste = async (event: ClipboardEvent) => {
-    event.preventDefault()
-
-    const text = event.clipboardData?.getData('text/plain')
-    if (!text || !this.editorInstance) return
-
-    // Split by line breaks and create blocks for each line (including empty ones)
-    const lines = text.split('\n')
-    const currentBlockIndex = this.editorInstance.blocks.getCurrentBlockIndex()
-
-    // Delete the current block (we'll replace it with pasted content)
-    this.editorInstance.blocks.delete(currentBlockIndex)
-
-    // Insert blocks for each line
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i]
-      this.editorInstance.blocks.insert('paragraph', { text: line }, {}, currentBlockIndex + i, i === 0)
-    }
+        return ''
+      })
+      .join('')
   }
 
   collapseBlocks = (editorBlocks: any[]): Array<{id: string, text: string, collapsedIds: string[]}> => {
     // Collapse consecutive non-empty paragraph blocks into logical blocks
     // separated by empty paragraphs
+    // Works with BlockNote format: blocks have content array with { type: 'text', text: '...' } objects
     const collapsed: Array<{id: string, text: string, collapsedIds: string[]}> = []
     let currentText = ''
     let currentId = ''
@@ -294,10 +80,9 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       const block = editorBlocks[i]
 
       if (block.type === 'paragraph') {
-        // Strip HTML tags to get plain text
-        const text = block.data.text ? block.data.text.replace(/<[^>]*>/g, '') : ''
+        const text = this.getText(block)
 
-        if (text.trim() === '') {
+        if (!text) {
           // Empty block - finalize current collapsed block if any
           if (currentText.trim() !== '') {
             collapsed.push({ id: currentId, text: currentText.trim(), collapsedIds: currentIds })
@@ -327,22 +112,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     return collapsed
   }
 
-  logBlocksForAnalyzer = async () => {
-    if (!this.editorInstance) return
-
-    try {
-      const editorData = await this.editorInstance.save()
-      const paragraphBlocks = editorData.blocks.filter((block: any) => block.type === 'paragraph')
-      const blocksForAnalyzer = this.collapseBlocks(paragraphBlocks)
-
-      if (blocksForAnalyzer.length > 0) {
-        console.log('Blocks for analyzer:')
-        console.log(JSON.stringify(blocksForAnalyzer, null, 2))
-      }
-    } catch (error) {
-      // Silently fail if editor isn't ready
-    }
-  }
 
   handleTitleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const title = e.target.value
@@ -404,13 +173,13 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   }
 
   handleAnalyzeAll = async () => {
-    if (!this.editorInstance || !this.props.note) return
+    if (!this.props.note) return
 
     this.setState({ isAnalyzing: true })
 
     try {
-      const editorData = await this.editorInstance.save()
-      const paragraphBlocks = editorData.blocks.filter((block: any) => block.type === 'paragraph')
+      const editorData = { blocks: this.lastBlockNoteDoc || [] }
+      const paragraphBlocks = (editorData.blocks || []).filter((block: any) => block.type === 'paragraph')
       const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
 
       if (collapsedBlocks.length === 0) {
@@ -421,51 +190,26 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       // Call analyzeNote to get annotations for all blocks
       const annotationsByBlockId = await analyzeNote(collapsedBlocks)
 
-      // Insert annotation blocks for each block that has annotations
-      const blocks = this.editorInstance.blocks
-
+      // Insert annotation callouts for each block that has annotations
       for (const collapsedBlock of collapsedBlocks) {
         const blockId = collapsedBlock.id
         const apiAnnotations = annotationsByBlockId[blockId] || []
 
         if (apiAnnotations.length > 0) {
-          const blockIndex = blocks.getBlockIndex(blockId)
-          if (blockIndex >= 0) {
-            // Convert API annotations to our format
-            const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
+          // Convert API annotations to our format
+          const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
+          const markdown = newAnnotations.map(a => `- ${a.source ? `(${a.source}) ` : ''}${a.description || ''}`).join('\\n')
 
-            // Check if there's already an annotation block after this block
-            let annotationBlockIndex = blockIndex + 1
-            const nextBlock = editorData.blocks[annotationBlockIndex]
-            if (nextBlock && nextBlock.type === 'annotation') {
-              // Update existing annotation block
-              const existingBlock = blocks.getBlockByIndex(annotationBlockIndex)
-              if (existingBlock) {
-                // Merge with existing annotations
-                const existingAnnotations = (nextBlock.data.annotations || []) as any[]
-                const allAnnotations = [...existingAnnotations, ...newAnnotations]
-                blocks.update(existingBlock.id, {
-                  annotations: allAnnotations,
-                  isExpanded: nextBlock.data.isExpanded || false,
-                })
-              }
-            } else {
-              // Insert new annotation block
-              blocks.insert('annotation', {
-                annotations: newAnnotations,
-                isExpanded: false,
-              }, {}, annotationBlockIndex, false)
-            }
+          // Insert a callout after the last block in the collapsed group
+          const lastBlockIdInCollapsed = collapsedBlock.collapsedIds[collapsedBlock.collapsedIds.length - 1] || collapsedBlock.id
+          this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, markdown)
 
-            // Mark the block as analyzed and clean
-            this.blockAnalysisStatus.set(blockId, { isDirty: false, isAnalyzed: true })
-          }
+          // Mark the block as analyzed and clean
+          this.blockAnalysisStatus.set(blockId, { isDirty: false, isAnalyzed: true })
         }
       }
 
-      // Save the updated data
-      const updatedData = await this.editorInstance.save()
-      this.props.onUpdateNote(this.props.note!.id, this.state.title, updatedData)
+      // Save via onUpdate from BlockNote will cover persistence
     } catch (error) {
       console.error('Error analyzing note:', error)
     }
@@ -520,6 +264,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
               }
             }}
             onDoubleEnter={(finishedBlockId) => {
+              console.log('onDoubleEnter called', finishedBlockId)
               // Trigger analysis for the finished collapsed block
               this.triggerAnalysis(finishedBlockId)
             }}

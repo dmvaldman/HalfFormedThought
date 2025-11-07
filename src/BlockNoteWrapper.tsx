@@ -88,7 +88,6 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
     this.editor = ed
     // Forward updates upstream
     this.cleanupOnUpdate = this.editor.onChange((editor: BlockNoteEditor) => {
-      console.log('BlockNote onChange fired', editor.document)
       this.props.onUpdate(editor.document)
     })
     // Detect double-Enter via insert events

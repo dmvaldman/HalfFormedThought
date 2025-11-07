@@ -9,7 +9,7 @@ export interface Annotation {
 export interface Note {
   id: string
   title: string
-  content: any // EditorJS OutputData format: { blocks: [...] }
+  content: any // BlockNote document format: array of blocks
   createdAt: number
   updatedAt: number
 }

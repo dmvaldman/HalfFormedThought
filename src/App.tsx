@@ -63,7 +63,6 @@ class App extends Component<{}, AppState> {
   }
 
   handleUpdateNote = (noteId: string, title: string, content: any) => {
-    console.log('handleUpdateNote', noteId, title, content);
     const updatedNotes = this.state.notes.map((note) =>
       note.id === noteId
         ? { ...note, title, content, updatedAt: Date.now() }

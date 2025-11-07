@@ -4,13 +4,6 @@
   box-sizing: border-box;
 }
 
-.ce-block__content {
-  margin-left: 0px;
-}
-
-/* from https://github.com/codex-team/editor.js/issues/1328 */
-.ce-block__content, .ce-toolbar__content { max-width: 100% !important; } .cdx-block { max-width: 100% !important; }
-
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -25,6 +18,10 @@ body {
 
 #root {
   height: 100vh;
+}
+
+.bn-editor {
+  background: transparent;
 }
 
 .app {
@@ -219,132 +216,6 @@ body {
   overflow-y: auto;
   min-height: 0;
 }
-
-.note-content-input {
-  width: 100%;
-  background: transparent;
-  border: none;
-  color: #e0e0e0;
-  font-size: 16px;
-  font-family: inherit;
-  resize: none;
-  outline: none;
-  line-height: 1.6;
-  overflow: hidden;
-  margin-bottom: 8px;
-}
-
-.note-content-input::placeholder {
-  color: #666;
-}
-
-/* Scrollbar styling */
-.notes-list::-webkit-scrollbar,
-.note-content-container::-webkit-scrollbar {
-  width: 8px;
-}
-
-.notes-list::-webkit-scrollbar-track,
-.note-content-container::-webkit-scrollbar-track {
-  background: #1a1a1a;
-}
-
-.notes-list::-webkit-scrollbar-thumb,
-.note-content-container::-webkit-scrollbar-thumb {
-  background: #444;
-  border-radius: 4px;
-}
-
-.notes-list::-webkit-scrollbar-thumb:hover,
-.note-content-container::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-/* Editor.js styling */
-.editorjs-container {
-  min-height: 100px;
-}
-
-.codex-editor {
-  background: transparent;
-  color: #e0e0e0;
-}
-
-.codex-editor__redactor {
-  padding: 0;
-}
-
-.ce-block {
-  margin: 0;
-  padding: 0;
-}
-
-/* Add spacing only after empty blocks to create paragraph separation */
-.ce-block:has(.ce-paragraph:empty) {
-  margin-bottom: 0px;
-}
-
-/* Add spacing before empty blocks too */
-.ce-block:has(.ce-paragraph:empty) {
-  margin-top: 0px;
-}
-
-.ce-paragraph {
-  color: #e0e0e0;
-  font-size: 16px;
-  line-height: 1.6;
-  font-family: inherit;
-  margin: 0;
-  padding: 0;
-}
-
-.ce-paragraph[data-placeholder]:empty::before {
-  color: #666;
-  opacity: 1;
-}
-
-.ce-toolbar {
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-
-.ce-block:hover .ce-toolbar,
-.ce-block--focused .ce-toolbar {
-  opacity: 1;
-}
-
-.ce-toolbar__content,
-.ce-settings {
-  background-color: #252525;
-  border: 1px solid #333;
-}
-
-.ce-toolbar__plus,
-.ce-toolbar__settings-btn {
-  color: #999;
-}
-
-.ce-toolbar__plus:hover,
-.ce-toolbar__settings-btn:hover {
-  color: #fff;
-  background-color: #333;
-}
-
-.ce-inline-toolbar {
-  background-color: #252525;
-  border: 1px solid #333;
-}
-
-.ce-inline-tool {
-  color: #999;
-}
-
-.ce-inline-tool:hover,
-.ce-inline-tool--active {
-  color: #fff;
-  background-color: #333;
-}
-
 /* Annotation Bar */
 .annotation-bar {
   margin: 8px 0;
