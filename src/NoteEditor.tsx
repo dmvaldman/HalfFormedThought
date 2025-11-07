@@ -5,6 +5,7 @@ import type { OutputData } from '@editorjs/editorjs'
 // @ts-ignore - Editor.js paragraph tool doesn't have proper TypeScript types
 import Paragraph from '@editorjs/paragraph'
 import AnnotationBlock from './AnnotationBlock'
+import BlockNoteWrapper, { BlockNoteWrapperHandle } from './BlockNoteWrapper'
 import { Note } from './types'
 import { createAnnotationFromAPI } from './annotations'
 import { analyzeNote, analyzeBlock } from './analyzer'
@@ -60,6 +61,8 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   private editorInstance: EditorJS | null = null
   private blockAnalysisStatus: Map<string, BlockAnalysisStatus> = new Map()
   private debouncedSave: () => void
+  private blockNoteRef = React.createRef<BlockNoteWrapperHandle>()
+  private lastBlockNoteDoc: any = null
 
   constructor(props: NoteEditorProps) {
     super(props)
@@ -346,37 +349,30 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     this.setState({ title })
     e.target.style.height = 'auto'
     e.target.style.height = `${e.target.scrollHeight}px`
-    if (this.props.note && this.editorInstance) {
-      this.editorInstance.save().then((editorData) => {
-        this.props.onUpdateNote(this.props.note!.id, title, editorData)
-      })
+    // Update note immediately when title changes so sidebar reflects the change
+    if (this.props.note) {
+      const content = this.lastBlockNoteDoc || this.props.note.content
+      this.props.onUpdateNote(this.props.note.id, title, content)
     }
   }
 
   triggerAnalysis = async (blockId: string) => {
-    if (!this.editorInstance || !this.props.note) return
+    if (!this.props.note) return
 
     this.setState({ isAnalyzing: true })
 
     try {
-      const editorData = await this.editorInstance.save()
-      const paragraphBlocks = editorData.blocks.filter((block: any) => block.type === 'paragraph')
+      const editorData = { blocks: this.lastBlockNoteDoc || [] }
+      const paragraphBlocks = (editorData.blocks || []).filter((block: any) => block.type === 'paragraph')
       const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
 
       // Find the block data for debugging
-      const blockData = paragraphBlocks.find((b: any) => b.id === blockId)
-      console.log('Block data (from editorData):', {
-        id: blockData?.id,
-        type: blockData?.type,
-        text: blockData?.data?.text
-      })
-      console.log('Collapsed blocks:', collapsedBlocks)
+      // const blockData = paragraphBlocks.find((b: any) => b.id === blockId)
 
       // Find the collapsed block that contains this blockId
       const currentBlock = collapsedBlocks.find(b =>
         b.id === blockId || b.collapsedIds.includes(blockId)
       )
-      console.log('Current collapsed block:', currentBlock)
 
       if (!currentBlock) {
         console.log('No collapsed block found for blockId:', blockId)
@@ -384,61 +380,21 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         return
       }
 
-      // Get existing annotations for this block (if any)
-      const blocks = this.editorInstance.blocks
-      // Find the last block ID in the collapsed block's collapsedIds array
-      const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1]
-      const lastBlockIndex = blocks.getBlockIndex(lastBlockIdInCollapsed)
-      let existingAnnotations: any[] = []
-
-      if (lastBlockIndex >= 0) {
-        // Check if there's an annotation block right after the last block in the collapsed group
-        const nextBlockIndex = lastBlockIndex + 1
-        if (nextBlockIndex < editorData.blocks.length) {
-          const nextBlock = editorData.blocks[nextBlockIndex]
-          if (nextBlock.type === 'annotation') {
-            existingAnnotations = nextBlock.data.annotations || []
-          }
-        }
-      }
+      // Existing annotations lookup is skipped for BlockNote path for now
+      const existingAnnotations: any[] = []
 
       // Call analyzeBlock
       const apiAnnotations = await analyzeBlock(collapsedBlocks, currentBlock, existingAnnotations)
 
       if (apiAnnotations.length > 0) {
         const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
-
-        if (lastBlockIndex >= 0) {
-          // Check if there's already an annotation block after the last block in the collapsed group
-          const annotationBlockIndex = lastBlockIndex + 1
-          const nextBlock = editorData.blocks[annotationBlockIndex]
-
-          if (nextBlock && nextBlock.type === 'annotation') {
-            // Update existing annotation block
-            const existingBlock = blocks.getBlockByIndex(annotationBlockIndex)
-            if (existingBlock) {
-              // Merge with existing annotations
-              const allAnnotations = [...existingAnnotations, ...newAnnotations]
-              blocks.update(existingBlock.id, {
-                annotations: allAnnotations,
-                isExpanded: nextBlock.data.isExpanded || false,
-              })
-            }
-          } else {
-            // Insert new annotation block after the last block in the collapsed group
-            blocks.insert('annotation', {
-              annotations: newAnnotations,
-              isExpanded: false,
-            }, {}, annotationBlockIndex, false)
-          }
-
-          // Mark the block as analyzed and clean (use the collapsed block's ID)
-          this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
-
-          // Save the updated data
-          const updatedData = await this.editorInstance.save()
-          this.props.onUpdateNote(this.props.note!.id, this.state.title, updatedData)
-        }
+        const markdown = newAnnotations.map(a => `- ${a.source ? `(${a.source}) ` : ''}${a.description || ''}`).join('\\n')
+        // Insert a callout after the last block in the collapsed group
+        const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
+        this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, markdown)
+        // Mark the block as analyzed and clean (use the collapsed block's ID)
+        this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
+        // Save via onUpdate from BlockNote will cover persistence
       }
     } catch (error) {
       console.error('Error analyzing block:', error)
@@ -554,7 +510,20 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           </button>
         </div>
         <div className="note-content-container" ref={this.contentContainerRef}>
-          <div id="editorjs-holder" ref={this.editorRef} className="editorjs-container"></div>
+          <BlockNoteWrapper
+            ref={this.blockNoteRef}
+            initialContent={Array.isArray(note.content) ? note.content : []}
+            onUpdate={(doc) => {
+              this.lastBlockNoteDoc = doc
+              if (this.props.note) {
+                this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
+              }
+            }}
+            onDoubleEnter={(finishedBlockId) => {
+              // Trigger analysis for the finished collapsed block
+              this.triggerAnalysis(finishedBlockId)
+            }}
+          />
         </div>
         {isAnalyzing && (
           <div className="analysis-spinner">

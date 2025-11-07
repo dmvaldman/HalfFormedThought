@@ -3,6 +3,7 @@ import Sidebar from './Sidebar'
 import NoteEditor from './NoteEditor'
 import { Note } from './types'
 import { loadNotes, saveNotes, generateId } from './storage'
+import { debounce } from './utils'
 
 interface AppState {
   notes: Note[]
@@ -10,6 +11,8 @@ interface AppState {
 }
 
 class App extends Component<{}, AppState> {
+  private debouncedSaveNotes: (notes: Note[]) => void
+
   constructor(props: {}) {
     super(props)
     const notes = loadNotes()
@@ -17,6 +20,10 @@ class App extends Component<{}, AppState> {
       notes,
       currentNoteId: notes.length > 0 ? notes[0].id : null,
     }
+    // Create debounced version of saveNotes
+    this.debouncedSaveNotes = debounce((notes: Note[]) => {
+      saveNotes(notes)
+    }, 500)
   }
 
   handleSelectNote = (noteId: string) => {
@@ -28,7 +35,7 @@ class App extends Component<{}, AppState> {
     const newNote: Note = {
       id: generateId(),
       title: '',
-      content: { blocks: [] },
+      content: [], // BlockNote format: array, not { blocks: [] }
       createdAt: now,
       updatedAt: now,
     }
@@ -56,13 +63,14 @@ class App extends Component<{}, AppState> {
   }
 
   handleUpdateNote = (noteId: string, title: string, content: any) => {
+    console.log('handleUpdateNote', noteId, title, content);
     const updatedNotes = this.state.notes.map((note) =>
       note.id === noteId
         ? { ...note, title, content, updatedAt: Date.now() }
         : note
     )
     this.setState({ notes: updatedNotes })
-    saveNotes(updatedNotes)
+    this.debouncedSaveNotes(updatedNotes)
   }
 
   render() {
