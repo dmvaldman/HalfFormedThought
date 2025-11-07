@@ -24,7 +24,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   private contentContainerRef: RefObject<HTMLDivElement | null>
   private blockAnalysisStatus: Map<string, BlockAnalysisStatus> = new Map()
   private blockNoteRef = React.createRef<BlockNoteWrapperHandle>()
-  private lastBlockNoteDoc: any = null
+  private blocks: any[] = []
 
   constructor(props: NoteEditorProps) {
     super(props)
@@ -40,6 +40,8 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     if (prevProps.note?.id !== this.props.note?.id) {
       // Clear analysis status when switching notes
       this.blockAnalysisStatus.clear()
+      // Initialize blocks from note content
+      this.blocks = Array.isArray(this.props.note?.content) ? this.props.note.content : []
       this.setState({
         title: this.props.note?.title || '',
         isAnalyzing: false,
@@ -49,6 +51,13 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     if (this.titleTextareaRef.current) {
       this.titleTextareaRef.current.style.height = 'auto'
       this.titleTextareaRef.current.style.height = `${this.titleTextareaRef.current.scrollHeight}px`
+    }
+  }
+
+  componentDidMount() {
+    // Initialize blocks from note content
+    if (this.props.note) {
+      this.blocks = Array.isArray(this.props.note.content) ? this.props.note.content : []
     }
   }
 
@@ -120,7 +129,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     e.target.style.height = `${e.target.scrollHeight}px`
     // Update note immediately when title changes so sidebar reflects the change
     if (this.props.note) {
-      const content = this.lastBlockNoteDoc || this.props.note.content
+      const content = this.blocks.length > 0 ? this.blocks : this.props.note.content
       this.props.onUpdateNote(this.props.note.id, title, content)
     }
   }
@@ -131,8 +140,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     this.setState({ isAnalyzing: true })
 
     try {
-      const editorData = { blocks: this.lastBlockNoteDoc || [] }
-      const paragraphBlocks = (editorData.blocks || []).filter((block: any) => block.type === 'paragraph')
+      const paragraphBlocks = this.blocks.filter((block: any) => block.type === 'paragraph')
       const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
 
       // Find the block data for debugging
@@ -178,8 +186,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     this.setState({ isAnalyzing: true })
 
     try {
-      const editorData = { blocks: this.lastBlockNoteDoc || [] }
-      const paragraphBlocks = (editorData.blocks || []).filter((block: any) => block.type === 'paragraph')
+      const paragraphBlocks = this.blocks.filter((block: any) => block.type === 'paragraph')
       const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
 
       if (collapsedBlocks.length === 0) {
@@ -257,10 +264,10 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           <BlockNoteWrapper
             ref={this.blockNoteRef}
             initialContent={Array.isArray(note.content) ? note.content : []}
-            onUpdate={(doc) => {
-              this.lastBlockNoteDoc = doc
+            onUpdate={(blocks) => {
+              this.blocks = blocks
               if (this.props.note) {
-                this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
+                this.props.onUpdateNote(this.props.note.id, this.state.title, blocks)
               }
             }}
             onDoubleEnter={(finishedBlockId) => {

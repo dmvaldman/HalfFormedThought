@@ -203,7 +203,11 @@ where annotations is an array (0-3 in length) of {description, relevance, source
 An annotation is a unique expansion on the essay's theme relative to the text block${existingSourcesNote}
 `.trim()
 
+  console.log('userPrompt', userPrompt)
+
   const parsed = await callTogetherAPI(userPrompt)
+
+  console.log('Response', parsed.annotations)
   return (parsed.annotations || []) as Annotation[]
 }
 
