@@ -19,12 +19,35 @@ where annotations is an array (0-3 in length) of {description, relevance, source
 `.trim()
 
 // Configuration: choose API provider ('together' or 'kimi')
-const API_PROVIDER: 'together' | 'kimi' = 'kimi'
+// NOTE: 'kimi' requires a backend proxy due to CORS restrictions - direct browser access is blocked
+// Use 'together' for direct browser access without a proxy
+const API_PROVIDER: 'together' | 'kimi' = 'together'
 
 // Model names differ between providers
 const MODEL_NAMES = {
   together: 'moonshotai/Kimi-K2-Instruct-0905',
   kimi: 'kimi-k2-0905-preview'
+}
+
+// JSON Schema for annotations response (for Together.ai JSON mode)
+const ANNOTATIONS_SCHEMA = {
+  type: 'object',
+  properties: {
+    annotations: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          description: { type: 'string' },
+          relevance: { type: 'string' },
+          source: { type: 'string' },
+          domain: { type: 'string' }
+        },
+        required: []
+      }
+    }
+  },
+  required: ['annotations']
 }
 
 // Initialize API clients
@@ -35,6 +58,7 @@ const together = new Together({
 const kimi = new OpenAI({
   apiKey: (import.meta as any).env?.VITE_MOONSHOT_API_KEY || '',
   baseURL: 'https://api.moonshot.ai/v1',
+  dangerouslyAllowBrowser: true, // Required for browser environments
 })
 
 async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void) {
@@ -52,10 +76,12 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userPrompt }
     ],
-    temperature: 0.8,
-    response_format: { type: 'json_object' },
+    temperature: 0.6,
+    response_format: { type: 'json_schema', schema: ANNOTATIONS_SCHEMA },
     stream: true
   })
+
+  console.log('userPrompt\n\n', userPrompt)
 
   let fullResponse = ''
   let currentBuffer = ''
@@ -111,8 +137,6 @@ async function parseResponse(fullResponse: string) {
   if (jsonMatch) {
     cleanedResponse = jsonMatch[1].trim()
   }
-
-  debugger;
 
   try {
     const parsed = JSON.parse(cleanedResponse)
@@ -258,9 +282,7 @@ where annotations is an array (1-3 in length) of {description, relevance, source
 You must provide at least one annotation.${existingSourcesNote}
 `.trim()
 
-  console.log('userPrompt', userPrompt)
-
-  const parsed = await callAPI(userPrompt)
+  const parsed = await callAPI(userPrompt, undefined)
 
   console.log('Response:', parsed.annotations)
 

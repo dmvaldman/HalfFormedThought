@@ -117,27 +117,16 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
   }
 
   insertAnnotationAfter = (afterBlockId: string, markdown: string) => {
-    if (!this.editor) return
-    // Use getBlock to get the block reference - it returns a proper BlockIdentifier
-    const referenceBlock = this.editor.getBlock(afterBlockId)
-    if (!referenceBlock) {
-      console.warn('Block not found for ID:', afterBlockId)
+    if (!this.editor) {
+      console.warn('Editor not initialized')
       return
     }
+
+    // Use BlockNote's insertBlocks API exactly as documented:
+    // https://www.blocknotejs.org/docs/reference/editor/manipulating-content#creating-blocks
     this.editor.insertBlocks(
-      [
-        {
-          type: 'callout',
-          props: { type: 'info' },
-          children: [
-            {
-              type: 'paragraph',
-              content: [{ type: 'text', text: markdown }],
-            },
-          ],
-        } as any,
-      ],
-      referenceBlock,
+      [{ type: 'paragraph', content: markdown }],
+      afterBlockId,
       'after'
     )
   }
