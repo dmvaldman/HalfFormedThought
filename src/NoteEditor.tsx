@@ -165,10 +165,9 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
 
       if (apiAnnotations.length > 0) {
         const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
-        const markdown = newAnnotations.map(a => `- ${a.source ? `(${a.source}) ` : ''}${a.description || ''}`).join('\\n')
-        // Insert a callout after the last block in the collapsed group
+        // Insert annotation block after the last block in the collapsed group
         const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
-        this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, markdown)
+        this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, newAnnotations)
         // Mark the block as analyzed and clean (use the collapsed block's ID)
         this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
         // Save via onUpdate from BlockNote will cover persistence
@@ -205,11 +204,10 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         if (apiAnnotations.length > 0) {
           // Convert API annotations to our format
           const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
-          const markdown = newAnnotations.map(a => `- ${a.source ? `(${a.source}) ` : ''}${a.description || ''}`).join('\\n')
 
-          // Insert a callout after the last block in the collapsed group
+          // Insert annotation block after the last block in the collapsed group
           const lastBlockIdInCollapsed = collapsedBlock.collapsedIds[collapsedBlock.collapsedIds.length - 1] || collapsedBlock.id
-          this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, markdown)
+          this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, newAnnotations)
 
           // Mark the block as analyzed and clean
           this.blockAnalysisStatus.set(blockId, { isDirty: false, isAnalyzed: true })

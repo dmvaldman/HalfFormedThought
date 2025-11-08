@@ -2,13 +2,17 @@ import React, { useEffect, useRef } from 'react'
 import { BlockNoteView } from '@blocknote/mantine'
 import type { BlockNoteEditor } from '@blocknote/core'
 import { useCreateBlockNote } from '@blocknote/react'
+import { BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core'
+import { annotationBlockSpec } from './AnnotationBlock'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 
 type Block = any
 
+import { Annotation } from './types'
+
 export interface BlockNoteWrapperHandle {
-  insertAnnotationAfter: (afterBlockId: string, markdown: string) => void
+  insertAnnotationAfter: (afterBlockId: string, annotations: Annotation[]) => void
 }
 
 interface BlockNoteWrapperProps {
@@ -31,7 +35,15 @@ function InternalBlockNote({
   initialContent: any[] | undefined
   onEditorReady: (ed: BlockNoteEditor) => void
 }) {
+  const schema = BlockNoteSchema.create({
+    blockSpecs: {
+      ...defaultBlockSpecs,
+      annotation: annotationBlockSpec(),
+    },
+  })
+
   const editor = useCreateBlockNote({
+    schema,
     initialContent: initialContent && initialContent.length > 0 ? initialContent : undefined,
     pasteHandler: ({ event, editor, defaultPasteHandler }) => {
       const plainText = event.clipboardData?.getData('text/plain')
@@ -71,7 +83,7 @@ function InternalBlockNote({
   useEffect(() => {
     if (!hasCalledReady.current) {
       hasCalledReady.current = true
-      onEditorReady(editor)
+      onEditorReady(editor as any) // Type assertion for custom schema
     }
   }, [editor, onEditorReady])
   return <BlockNoteView editor={editor} />
@@ -85,13 +97,13 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
   private handleEditorReady = (ed: BlockNoteEditor) => {
     if (this.editor) return
     console.log('handleEditorReady called', ed)
-    this.editor = ed
+    this.editor = ed as any // Type assertion needed for custom schema
     // Forward updates upstream
-    this.cleanupOnUpdate = this.editor.onChange((editor: BlockNoteEditor) => {
+    this.cleanupOnUpdate = (this.editor as any).onChange((editor: BlockNoteEditor) => {
       this.props.onUpdate(editor.document)
     })
     // Detect double-Enter via insert events
-    this.cleanupOnChange = this.editor.onChange((editor: BlockNoteEditor, { getChanges }) => {
+    this.cleanupOnChange = (this.editor as any).onChange((editor: BlockNoteEditor, { getChanges }: { getChanges: () => any[] }) => {
       const changes = getChanges()
       for (const ch of changes) {
         if (ch.type !== 'insert') continue
@@ -116,16 +128,27 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
     if (this.cleanupOnUpdate) this.cleanupOnUpdate()
   }
 
-  insertAnnotationAfter = (afterBlockId: string, markdown: string) => {
+  insertAnnotationAfter = (afterBlockId: string, annotations: Annotation[]) => {
     if (!this.editor) {
       console.warn('Editor not initialized')
       return
     }
 
-    // Use BlockNote's insertBlocks API exactly as documented:
-    // https://www.blocknotejs.org/docs/reference/editor/manipulating-content#creating-blocks
+    if (annotations.length === 0) {
+      return
+    }
+
+    // Use BlockNote's insertBlocks API to insert annotation block
+    // Store annotations as JSON string since BlockNote props only support primitives
     this.editor.insertBlocks(
-      [{ type: 'paragraph', content: markdown }],
+      [
+        {
+          type: 'annotation' as any,
+          props: {
+            annotationsJson: JSON.stringify(annotations),
+          },
+        } as any,
+      ],
       afterBlockId,
       'after'
     )

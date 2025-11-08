@@ -1,3 +1,21 @@
+/* CSS Variables - Colors */
+:root {
+  /* Base Colors */
+  --white: #e0e0e0;
+  --black: #1a1a1a;
+  --light-gray: #aaa;
+  --medium-gray: #666;
+  --dark-gray: #333;
+
+  /* Accent Colors */
+  --accent-blue: #4a9eff;
+  --accent-cyan: #61dafb;
+  --accent-red: #ff4444;
+
+  /* Shadow */
+  --shadow-dark: rgba(0, 0, 0, 0.3);
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -10,7 +28,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: #1a1a1a;
+  background-color: var(--black);
   color: #ffffff;
   height: 100vh;
   overflow: hidden;
@@ -27,14 +45,14 @@ body {
 .app {
   display: flex;
   height: 100vh;
-  background-color: #1a1a1a;
+  background-color: var(--black);
 }
 
 /* Sidebar */
 .sidebar {
   width: 250px;
   background-color: #252525;
-  border-right: 1px solid #333;
+  border-right: 1px solid var(--dark-gray);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -42,14 +60,14 @@ body {
 
 .sidebar-header {
   padding: 16px 16px 16px 32px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--dark-gray);
 }
 
 .new-note-button {
   width: 100%;
   padding: 12px;
   background-color: #2a2a2a;
-  border: 1px solid #333;
+  border: 1px solid var(--dark-gray);
   border-radius: 6px;
   color: #ffffff;
   font-size: 24px;
@@ -59,7 +77,7 @@ body {
 }
 
 .new-note-button:hover {
-  background-color: #333;
+  background-color: var(--dark-gray);
 }
 
 .notes-list {
@@ -85,7 +103,7 @@ body {
 }
 
 .note-item.active {
-  background-color: #333;
+  background-color: var(--dark-gray);
 }
 
 .note-title {
@@ -93,7 +111,7 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #e0e0e0;
+  color: var(--white);
   font-size: 14px;
 }
 
@@ -102,7 +120,7 @@ body {
   transition: opacity 0.2s;
   background: none;
   border: none;
-  color: #999;
+  color: var(--light-gray);
   font-size: 24px;
   cursor: pointer;
   padding: 0;
@@ -120,7 +138,7 @@ body {
 
 .note-item .delete-button:hover {
   background-color: #444;
-  color: #fff;
+  color: #ffffff;
 }
 
 /* Note Editor */
@@ -128,7 +146,7 @@ body {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background-color: #1a1a1a;
+  background-color: var(--black);
   overflow: hidden;
 }
 
@@ -139,13 +157,13 @@ body {
 }
 
 .empty-state {
-  color: #666;
+  color: var(--medium-gray);
   font-size: 16px;
 }
 
 .note-title-container {
   padding: 16px 32px 22px;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid var(--dark-gray);
   display: flex;
   align-items: flex-start;
   gap: 16px;
@@ -167,12 +185,12 @@ body {
 }
 
 .note-title-input::placeholder {
-  color: #666;
+  color: var(--medium-gray);
 }
 
 .analyze-button {
   background: #2a2a2a;
-  border: 1px solid #333;
+  border: 1px solid var(--dark-gray);
   color: #ffffff;
   padding: 8px 16px;
   border-radius: 6px;
@@ -188,7 +206,7 @@ body {
 
 .analyze-button:hover:not(:disabled) {
   background: #3a3a3a;
-  border-color: #666;
+  border-color: var(--medium-gray);
 }
 
 .analyze-button:disabled {
@@ -216,85 +234,98 @@ body {
   overflow-y: auto;
   min-height: 0;
 }
-/* Annotation Bar */
-.annotation-bar {
+
+/* Annotation Block (BlockNote) */
+.annotation-block {
   margin: 8px 0;
+  border: 1px solid var(--dark-gray);
+  border-radius: 4px;
+  background-color: #1e1e1e;
 }
 
-.annotation-line {
-  border-top: 1px solid #333;
-  padding: 8px 0;
+.annotation-block-header {
+  padding: 8px 12px;
   cursor: pointer;
-  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  user-select: none;
 }
 
-.annotation-line:hover {
-  background-color: #222;
-}
-
-.annotation-line-indicator {
-  color: #666;
+.annotation-block-header-text {
+  color: var(--light-gray);
   font-size: 12px;
-  padding: 4px 0;
 }
 
-.annotation-content {
-  margin-top: 8px;
+.annotation-block-content {
+  padding: 12px;
+  border-top: 1px solid var(--dark-gray);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.annotation-block-list {
+  display: flex;
+  gap: 12px;
+  min-width: max-content;
+}
+
+.annotation-block-card {
+  position: relative;
+  min-width: 200px;
+  max-width: 300px;
   padding: 12px;
   background-color: #252525;
   border-radius: 4px;
+  border: 1px solid var(--dark-gray);
 }
 
-.annotation-item {
-  position: relative;
-  padding: 8px;
-  margin-bottom: 8px;
-  background-color: #2a2a2a;
-  border-radius: 4px;
+.annotation-block-card:hover .annotation-block-delete-btn {
+  display: block;
 }
 
-.annotation-item:last-child {
-  margin-bottom: 0;
-}
-
-.annotation-markdown {
-  color: #e0e0e0;
-  font-size: 14px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-}
-
-.annotation-delete,
-.annotation-drag {
+.annotation-block-delete-btn {
+  display: none;
   position: absolute;
-  top: 8px;
-  right: 8px;
-  background: none;
+  top: 4px;
+  right: 4px;
+  background: var(--black);
   border: none;
-  color: #999;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
   cursor: pointer;
-  font-size: 18px;
-  padding: 4px;
-  opacity: 0;
-  transition: opacity 0.2s;
+  color: #ffffff;
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
 }
 
-.annotation-item:hover .annotation-delete,
-.annotation-item:hover .annotation-drag {
-  opacity: 1;
+.annotation-block-source {
+  font-size: 12px;
+  font-weight: bold;
+  color: var(--accent-blue);
+  margin-bottom: 4px;
 }
 
-.annotation-delete:hover {
-  color: #fff;
+.annotation-block-domain {
+  font-size: 11px;
+  color: var(--light-gray);
+  margin-bottom: 8px;
+  font-style: italic;
 }
 
-.annotation-drag {
-  right: 32px;
-  cursor: grab;
+.annotation-block-description {
+  font-size: 13px;
+  color: var(--white);
+  margin-bottom: 8px;
+  line-height: 1.5;
 }
 
-.annotation-drag:active {
-  cursor: grabbing;
+.annotation-block-relevance {
+  font-size: 12px;
+  color: var(--light-gray);
+  line-height: 1.4;
 }
 
 /* Analysis Spinner */
@@ -305,17 +336,17 @@ body {
   width: 40px;
   height: 40px;
   background-color: #252525;
-  border: 1px solid #333;
+  border: 1px solid var(--dark-gray);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 8px var(--shadow-dark);
 }
 
 .spinner-icon {
   font-size: 20px;
-  color: #61dafb;
+  color: var(--accent-cyan);
   animation: spin 1s linear infinite;
 }
 
