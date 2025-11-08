@@ -226,26 +226,28 @@ body {
   min-height: 0;
 }
 
-/* Dark mode scrollbar for note content */
-.note-content-container::-webkit-scrollbar {
+/* Generic dark mode scrollbar styling */
+::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
-.note-content-container::-webkit-scrollbar-track {
+::-webkit-scrollbar-track {
   background: var(--black);
 }
 
-.note-content-container::-webkit-scrollbar-thumb {
+::-webkit-scrollbar-thumb {
   background: var(--dark-gray);
   border-radius: 4px;
 }
 
-.note-content-container::-webkit-scrollbar-thumb:hover {
+::-webkit-scrollbar-thumb:hover {
   background: var(--medium-gray);
 }
 
 /* Annotation Block (BlockNote) */
 .annotation-block {
+  width: 100%;
   margin: 8px 0;
   border: 1px solid var(--dark-gray);
   border-radius: 4px;
@@ -283,7 +285,7 @@ body {
 .annotation-block-card {
   position: relative;
   min-width: 200px;
-  max-width: 300px;
+  max-width: 350px;
   padding: 12px;
   background-color: #252525;
   border-radius: 4px;
