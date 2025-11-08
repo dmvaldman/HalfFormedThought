@@ -134,7 +134,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     }
   }
 
-  triggerAnalysis = async (blockId: string, existingAnnotations: any[] = []) => {
+  triggerAnalysis = async (blockId: string) => {
     if (!this.props.note) return
 
     this.setState({ isAnalyzing: true })
@@ -154,24 +154,53 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         return
       }
 
-      // Call analyzeBlock with existing annotations (empty for new analysis)
-      const apiAnnotations = await analyzeBlock(collapsedBlocks, currentBlock, existingAnnotations)
+      // Call analyzeBlock for new analysis
+      const apiAnnotations = await analyzeBlock(collapsedBlocks, currentBlock, [])
 
       if (apiAnnotations.length > 0) {
         const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
 
-        // If we have existing annotations, we're fetching more - append to the block
-        if (existingAnnotations.length > 0) {
-          this.blockNoteRef.current?.appendAnnotation(blockId, newAnnotations)
-        } else {
-          // New analysis - insert annotation block after the last block in the collapsed group
-          const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
-          console.log('[NoteEditor.triggerAnalysis] Inserting annotation block after:', lastBlockIdInCollapsed, 'with sourceBlockId:', currentBlock.id)
-          this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, newAnnotations, currentBlock.id)
-          // Mark the block as analyzed and clean (use the collapsed block's ID)
-          this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
-        }
-        // Save via onUpdate from BlockNote will cover persistence
+        // Insert annotation block after the last block in the collapsed group
+        const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
+        console.log('[NoteEditor.triggerAnalysis] Inserting annotation block after:', lastBlockIdInCollapsed, 'with sourceBlockId:', currentBlock.id)
+        this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, newAnnotations, currentBlock.id)
+        // Mark the block as analyzed and clean (use the collapsed block's ID)
+        this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
+      }
+    } catch (error) {
+      console.error('Error analyzing block:', error)
+    }
+
+    this.setState({ isAnalyzing: false })
+  }
+
+  triggerAnalysisForAnnotationBlock = async (annotationBlockId: string, sourceBlockId: string, existingAnnotations: any[]) => {
+    if (!this.props.note) return
+
+    this.setState({ isAnalyzing: true })
+
+    try {
+      const paragraphBlocks = this.blocks.filter((block: any) => block.type === 'paragraph')
+      const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
+
+      // Find the collapsed block by sourceBlockId
+      const currentBlock = collapsedBlocks.find(b =>
+        b.id === sourceBlockId || b.collapsedIds.includes(sourceBlockId)
+      )
+
+      if (!currentBlock) {
+        console.log('No collapsed block found for sourceBlockId:', sourceBlockId)
+        this.setState({ isAnalyzing: false })
+        return
+      }
+
+      // Call analyzeBlock with existing annotations to get more
+      const apiAnnotations = await analyzeBlock(collapsedBlocks, currentBlock, existingAnnotations)
+
+      if (apiAnnotations.length > 0) {
+        const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
+        console.log('[NoteEditor.triggerAnalysisForAnnotationBlock] Appending to annotation block:', annotationBlockId)
+        this.blockNoteRef.current?.appendAnnotation(annotationBlockId, newAnnotations)
       }
     } catch (error) {
       console.error('Error analyzing block:', error)
@@ -270,9 +299,10 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
               // Trigger analysis for the finished collapsed block
               this.triggerAnalysis(finishedBlockId)
             }}
-            onFetchMoreAnnotations={(sourceBlockId, currentAnnotations) =>
-              this.triggerAnalysis(sourceBlockId, currentAnnotations)
-            }
+            onFetchMoreAnnotations={(annotationBlockId, sourceBlockId, currentAnnotations) => {
+              // Analyze the source block and append results to this specific annotation block
+              this.triggerAnalysisForAnnotationBlock(annotationBlockId, sourceBlockId, currentAnnotations)
+            }}
           />
         </div>
         {isAnalyzing && (

@@ -38,7 +38,8 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, editor }) => {
 
     setIsFetching(true)
     try {
-      await onFetchMoreAnnotations(sourceBlockId, annotations)
+      // Pass annotation block's own ID, sourceBlockId for analysis, and current annotations
+      await onFetchMoreAnnotations(block.id, sourceBlockId, annotations)
     } catch (error) {
       console.error('Error fetching more annotations:', error)
     }

@@ -13,13 +13,13 @@ import { Annotation } from './types'
 
 // Context to pass callbacks to custom blocks
 export const BlockNoteContext = createContext<{
-  onFetchMoreAnnotations?: (sourceBlockId: string, currentAnnotations: Annotation[]) => Promise<void>
+  onFetchMoreAnnotations?: (annotationBlockId: string, sourceBlockId: string, currentAnnotations: Annotation[]) => void | Promise<void>
 }>({})
 
 
 export interface BlockNoteWrapperHandle {
   insertAnnotationAfter: (afterBlockId: string, annotations: Annotation[], sourceBlockId: string) => void
-  appendAnnotation: (sourceBlockId: string, newAnnotations: Annotation[]) => void
+  appendAnnotation: (annotationBlockId: string, newAnnotations: Annotation[]) => void
   updateAnnotationBlock: (annotationBlockId: string, newAnnotations: Annotation[]) => void
 }
 
@@ -27,7 +27,7 @@ interface BlockNoteWrapperProps {
   initialContent: any[] | undefined
   onUpdate: (content: any) => void
   onDoubleEnter: (finishedBlockId: string) => void
-  onFetchMoreAnnotations?: (sourceBlockId: string, currentAnnotations: Annotation[]) => Promise<void>
+  onFetchMoreAnnotations?: (annotationBlockId: string, sourceBlockId: string, currentAnnotations: Annotation[]) => void | Promise<void>
 }
 
 const isParagraphEmpty = (block: Block): boolean => {
@@ -171,22 +171,22 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
     )
   }
 
-  appendAnnotation = (sourceBlockId: string, newAnnotations: Annotation[]) => {
+  appendAnnotation = (annotationBlockId: string, newAnnotations: Annotation[]) => {
     if (!this.editor) {
       console.warn('Editor not initialized')
       return
     }
 
-    // Find the annotation block for this sourceBlockId
+    // Get the annotation block by its ID (not by searching sourceBlockId)
     const doc: any[] = (this.editor as any).document
-    const annotationBlock = doc.find((b: any) =>
-      b.type === 'annotation' && b.props?.sourceBlockId === sourceBlockId
-    )
+    const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
 
     if (!annotationBlock) {
-      console.warn('No annotation block found for sourceBlockId:', sourceBlockId)
+      console.warn('No annotation block found with ID:', annotationBlockId)
       return
     }
+
+    console.log('[BlockNoteWrapper.appendAnnotation] Appending to annotation block:', annotationBlockId)
 
     // Get existing annotations and append new ones
     const existingAnnotationsJson = annotationBlock.props?.annotationsJson || '[]'
