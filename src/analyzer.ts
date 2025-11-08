@@ -1,4 +1,5 @@
 import Together from 'together-ai'
+import OpenAI from 'openai'
 import { Annotation } from './types'
 
 const SYSTEM_PROMPT = `
@@ -15,24 +16,43 @@ where annotations is an array (0-3 in length) of {description, relevance, source
 - \`relevance\` is why this source is relevant to the text block (0-4 sentences)
 - \`source\` is the name of the source (person name, book title, essay title, etc).
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
-An annotation is a unique expansion on the essay's theme relative to the text block
 `.trim()
 
-const model = 'moonshotai/Kimi-K2-Instruct-0905'
+// Configuration: choose API provider ('together' or 'kimi')
+const API_PROVIDER: 'together' | 'kimi' = 'kimi'
 
-// Initialize Together client
+// Model names differ between providers
+const MODEL_NAMES = {
+  together: 'moonshotai/Kimi-K2-Instruct-0905',
+  kimi: 'kimi-k2-0905-preview'
+}
+
+// Initialize API clients
 const together = new Together({
   apiKey: (import.meta as any).env?.VITE_TOGETHER_API_KEY || '',
 })
 
+const kimi = new OpenAI({
+  apiKey: (import.meta as any).env?.VITE_MOONSHOT_API_KEY || '',
+  baseURL: 'https://api.moonshot.ai/v1',
+})
+
+async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void) {
+  if (API_PROVIDER === 'kimi') {
+    return callKimiAPI(userPrompt, onStreamChunk)
+  } else {
+    return callTogetherAPI(userPrompt, onStreamChunk)
+  }
+}
+
 async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void) {
   const stream = await together.chat.completions.create({
-    model: model,
+    model: MODEL_NAMES.together,
     messages: [
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userPrompt }
     ],
-    temperature: 0.6,
+    temperature: 0.8,
     response_format: { type: 'json_object' },
     stream: true
   })
@@ -51,6 +71,39 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
     }
   }
 
+  return parseResponse(fullResponse)
+}
+
+async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void) {
+  const stream = await kimi.chat.completions.create({
+    model: MODEL_NAMES.kimi,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: 0.8,
+    response_format: { type: 'json_object' },
+    stream: true
+  })
+
+  let fullResponse = ''
+  let currentBuffer = ''
+
+  for await (const chunk of stream) {
+    const content = chunk.choices[0]?.delta?.content || ''
+    if (content) {
+      fullResponse += content
+      currentBuffer += content
+      if (onStreamChunk) {
+        onStreamChunk(currentBuffer)
+      }
+    }
+  }
+
+  return parseResponse(fullResponse)
+}
+
+async function parseResponse(fullResponse: string) {
   // Parse the response
   let cleanedResponse = fullResponse.trim()
 
@@ -58,6 +111,8 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
   if (jsonMatch) {
     cleanedResponse = jsonMatch[1].trim()
   }
+
+  debugger;
 
   try {
     const parsed = JSON.parse(cleanedResponse)
@@ -137,7 +192,7 @@ export async function analyzeNote(blocks: Array<{ id: string; text: string }>): 
   const completedBlocks = new Set<string>()
   const parsedBlocks: Record<string, Annotation[]> = {}
 
-  const parsed = await callTogetherAPI(userPrompt, (currentBuffer) => {
+  const parsed = await callAPI(userPrompt, (currentBuffer) => {
     const completedBlock = tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks)
 
     if (completedBlock) {
@@ -195,20 +250,37 @@ block_id: ${currentBlock.id}
 ${currentBlock.text.replace(/\\n/g, '\n')}
 
 Form your response as JSON with an array of annotations: {annotations: [...]}
-where annotations is an array (0-3 in length) of {description, relevance, source, domain} (all fields are optional):
+where annotations is an array (1-3 in length) of {description, relevance, source, domain} (all fields are optional):
 - \`description\` is a short summary of the source (0-4 sentences)
 - \`relevance\` is why this source is relevant to the text block (0-4 sentences)
 - \`source\` is the name of the source (person name, book title, essay title, etc).
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
-An annotation is a unique expansion on the essay's theme relative to the text block${existingSourcesNote}
+You must provide at least one annotation.${existingSourcesNote}
 `.trim()
 
   console.log('userPrompt', userPrompt)
 
-  const parsed = await callTogetherAPI(userPrompt)
+  const parsed = await callAPI(userPrompt)
 
-  console.log('Response', parsed.annotations)
-  return (parsed.annotations || []) as Annotation[]
+  console.log('Response:', parsed.annotations)
+
+  // Ensure we always return an array
+  if (!parsed.annotations) {
+    return []
+  }
+
+  // If it's already an array, return it
+  if (Array.isArray(parsed.annotations)) {
+    return parsed.annotations as Annotation[]
+  }
+
+  // If it's an object, try to convert it to an array
+  if (typeof parsed.annotations === 'object') {
+    return [parsed.annotations] as Annotation[]
+  }
+
+  // Fallback to empty array
+  return []
 }
 
 

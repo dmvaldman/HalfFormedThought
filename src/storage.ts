@@ -23,7 +23,7 @@ function normalizeNote(note: any): Note {
           id: `annotation-${Date.now()}-${Math.random()}`,
           type: 'callout',
           props: { type: 'info' },
-          content: [
+          children: [
             {
               type: 'paragraph',
               content: [{ type: 'text', text: block.annotations.map((a: any) => a.description || '').join('\n') }],
