@@ -226,6 +226,24 @@ body {
   min-height: 0;
 }
 
+/* Dark mode scrollbar for note content */
+.note-content-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.note-content-container::-webkit-scrollbar-track {
+  background: var(--black);
+}
+
+.note-content-container::-webkit-scrollbar-thumb {
+  background: var(--dark-gray);
+  border-radius: 4px;
+}
+
+.note-content-container::-webkit-scrollbar-thumb:hover {
+  background: var(--medium-gray);
+}
+
 /* Annotation Block (BlockNote) */
 .annotation-block {
   margin: 8px 0;
@@ -240,6 +258,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
   user-select: none;
 }
 
