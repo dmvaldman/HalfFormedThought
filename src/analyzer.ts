@@ -1,4 +1,4 @@
-import Together from 'together-ai'
+import Together from "together-ai";
 import OpenAI from 'openai'
 import { Annotation } from './types'
 
@@ -25,7 +25,7 @@ const API_PROVIDER: 'together' | 'kimi' = 'together'
 
 // Model names differ between providers
 const MODEL_NAMES = {
-  together: 'moonshotai/Kimi-K2-Instruct-0905',
+  together: 'moonshotai/Kimi-K2-Instruct',
   kimi: 'kimi-k2-0905-preview'
 }
 
@@ -43,7 +43,7 @@ const ANNOTATIONS_SCHEMA = {
           source: { type: 'string' },
           domain: { type: 'string' }
         },
-        required: []
+        required: ['description', 'relevance', 'source', 'domain']
       }
     }
   },
@@ -61,72 +61,106 @@ const kimi = new OpenAI({
   dangerouslyAllowBrowser: true, // Required for browser environments
 })
 
-async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void) {
+async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true) {
   if (API_PROVIDER === 'kimi') {
-    return callKimiAPI(userPrompt, onStreamChunk)
+    return callKimiAPI(userPrompt, onStreamChunk, stream)
   } else {
-    return callTogetherAPI(userPrompt, onStreamChunk)
+    return callTogetherAPI(userPrompt, onStreamChunk, stream)
   }
 }
 
-async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void) {
-  const stream = await together.chat.completions.create({
-    model: MODEL_NAMES.together,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt }
-    ],
-    temperature: 0.6,
-    response_format: { type: 'json_schema', schema: ANNOTATIONS_SCHEMA },
-    stream: true
-  })
-
+async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true) {
   console.log('userPrompt\n\n', userPrompt)
 
-  let fullResponse = ''
-  let currentBuffer = ''
+  if (stream) {
+    const streamResponse = await together.chat.completions.create({
+      model: MODEL_NAMES.together,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.6,
+      response_format: { type: 'json_schema', schema: ANNOTATIONS_SCHEMA },
+      reasoning_effort: "high",
+      stream: true
+    })
 
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content || ''
-    if (content) {
-      fullResponse += content
-      currentBuffer += content
-      if (onStreamChunk) {
-        onStreamChunk(currentBuffer)
+    let fullResponse = ''
+    let currentBuffer = ''
+
+    for await (const chunk of streamResponse) {
+      const content = chunk.choices[0]?.delta?.content || ''
+      if (content) {
+        fullResponse += content
+        currentBuffer += content
+        if (onStreamChunk) {
+          onStreamChunk(currentBuffer)
+        }
       }
     }
-  }
 
-  return parseResponse(fullResponse)
+    return parseResponse(fullResponse)
+  } else {
+    const response = await together.chat.completions.create({
+      model: MODEL_NAMES.together,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.6,
+      response_format: { type: 'json_schema', schema: ANNOTATIONS_SCHEMA },
+      reasoning_effort: "high",
+      stream: false
+    })
+
+    const fullResponse = response.choices[0]?.message?.content || ''
+    return parseResponse(fullResponse)
+  }
 }
 
-async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void) {
-  const stream = await kimi.chat.completions.create({
-    model: MODEL_NAMES.kimi,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt }
-    ],
-    temperature: 0.8,
-    response_format: { type: 'json_object' },
-    stream: true
-  })
+async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true) {
+  if (stream) {
+    const streamResponse = await kimi.chat.completions.create({
+      model: MODEL_NAMES.kimi,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.6,
+      response_format: { type: 'json_object' },
+      stream: true
+    })
 
-  let fullResponse = ''
-  let currentBuffer = ''
+    let fullResponse = ''
+    let currentBuffer = ''
 
-  for await (const chunk of stream) {
-    const content = chunk.choices[0]?.delta?.content || ''
-    if (content) {
-      fullResponse += content
-      currentBuffer += content
-      if (onStreamChunk) {
-        onStreamChunk(currentBuffer)
+    for await (const chunk of streamResponse) {
+      const content = chunk.choices[0]?.delta?.content || ''
+      if (content) {
+        fullResponse += content
+        currentBuffer += content
+        if (onStreamChunk) {
+          onStreamChunk(currentBuffer)
+        }
       }
     }
-  }
 
-  return parseResponse(fullResponse)
+    return parseResponse(fullResponse)
+  } else {
+    const response = await kimi.chat.completions.create({
+      model: MODEL_NAMES.kimi,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: userPrompt }
+      ],
+      temperature: 0.8,
+      response_format: { type: 'json_object' },
+      stream: false
+    })
+
+    const fullResponse = response.choices[0]?.message?.content || ''
+    return parseResponse(fullResponse)
+  }
 }
 
 async function parseResponse(fullResponse: string) {
@@ -258,7 +292,7 @@ export async function analyzeBlock(
   const allBlocksText = allBlocks
     .map(block => {
       const textWithBreaks = block.text.replace(/\\n/g, '\n')
-      return `block_id: ${block.id}\n${textWithBreaks}`
+      return textWithBreaks
     })
     .join('\n\n')
 
@@ -273,16 +307,16 @@ Focus specifically on this block:
 block_id: ${currentBlock.id}
 ${currentBlock.text.replace(/\\n/g, '\n')}
 
-Form your response as JSON with an array of annotations: {annotations: [...]}
-where annotations is an array (1-3 in length) of {description, relevance, source, domain} (all fields are optional):
-- \`description\` is a short summary of the source (0-4 sentences)
-- \`relevance\` is why this source is relevant to the text block (0-4 sentences)
+Form your response as JSON {annotations: [annotation,...]} where annotations is a NON-EMPTY array (1-3 in length) of {description, relevance, source, domain}:
+- \`description\` is a short summary of the source (1-4 sentences)
+- \`relevance\` is why this source is relevant to the text block (1-4 sentences)
 - \`source\` is the name of the source (person name, book title, essay title, etc).
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
-You must provide at least one annotation.${existingSourcesNote}
+
+You MUST provide at least one annotation.${existingSourcesNote}
 `.trim()
 
-  const parsed = await callAPI(userPrompt, undefined)
+  const parsed = await callAPI(userPrompt, undefined, false)
 
   console.log('Response:', parsed.annotations)
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react'
+import React, { useEffect, useRef, createContext } from 'react'
 import { BlockNoteView } from '@blocknote/mantine'
 import type { BlockNoteEditor } from '@blocknote/core'
 import { useCreateBlockNote } from '@blocknote/react'
@@ -11,14 +11,23 @@ type Block = any
 
 import { Annotation } from './types'
 
+// Context to pass callbacks to custom blocks
+export const BlockNoteContext = createContext<{
+  onFetchMoreAnnotations?: (sourceBlockId: string, currentAnnotations: Annotation[]) => Promise<void>
+}>({})
+
+
 export interface BlockNoteWrapperHandle {
-  insertAnnotationAfter: (afterBlockId: string, annotations: Annotation[]) => void
+  insertAnnotationAfter: (afterBlockId: string, annotations: Annotation[], sourceBlockId: string) => void
+  appendAnnotation: (sourceBlockId: string, newAnnotations: Annotation[]) => void
+  updateAnnotationBlock: (annotationBlockId: string, newAnnotations: Annotation[]) => void
 }
 
 interface BlockNoteWrapperProps {
   initialContent: any[] | undefined
   onUpdate: (content: any) => void
   onDoubleEnter: (finishedBlockId: string) => void
+  onFetchMoreAnnotations?: (sourceBlockId: string, currentAnnotations: Annotation[]) => Promise<void>
 }
 
 const isParagraphEmpty = (block: Block): boolean => {
@@ -31,9 +40,11 @@ const isParagraphEmpty = (block: Block): boolean => {
 function InternalBlockNote({
   initialContent,
   onEditorReady,
+  contextValue,
 }: {
   initialContent: any[] | undefined
   onEditorReady: (ed: BlockNoteEditor) => void
+  contextValue: { onFetchMoreAnnotations?: (sourceBlockId: string, currentAnnotations: Annotation[]) => Promise<void> }
 }) {
   const schema = BlockNoteSchema.create({
     blockSpecs: {
@@ -86,7 +97,11 @@ function InternalBlockNote({
       onEditorReady(editor as any) // Type assertion for custom schema
     }
   }, [editor, onEditorReady])
-  return <BlockNoteView editor={editor} />
+  return (
+    <BlockNoteContext.Provider value={contextValue}>
+      <BlockNoteView editor={editor} />
+    </BlockNoteContext.Provider>
+  )
 }
 
 class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements BlockNoteWrapperHandle {
@@ -98,6 +113,7 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
     if (this.editor) return
     console.log('handleEditorReady called', ed)
     this.editor = ed as any // Type assertion needed for custom schema
+
     // Forward updates upstream
     this.cleanupOnUpdate = (this.editor as any).onChange((editor: BlockNoteEditor) => {
       this.props.onUpdate(editor.document)
@@ -128,7 +144,7 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
     if (this.cleanupOnUpdate) this.cleanupOnUpdate()
   }
 
-  insertAnnotationAfter = (afterBlockId: string, annotations: Annotation[]) => {
+  insertAnnotationAfter = (afterBlockId: string, annotations: Annotation[], sourceBlockId: string) => {
     if (!this.editor) {
       console.warn('Editor not initialized')
       return
@@ -146,6 +162,7 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
           type: 'annotation' as any,
           props: {
             annotationsJson: JSON.stringify(annotations),
+            sourceBlockId: sourceBlockId, // Store the collapsed block ID for fetching more
           },
         } as any,
       ],
@@ -154,11 +171,67 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
     )
   }
 
+  appendAnnotation = (sourceBlockId: string, newAnnotations: Annotation[]) => {
+    if (!this.editor) {
+      console.warn('Editor not initialized')
+      return
+    }
+
+    // Find the annotation block for this sourceBlockId
+    const doc: any[] = (this.editor as any).document
+    const annotationBlock = doc.find((b: any) =>
+      b.type === 'annotation' && b.props?.sourceBlockId === sourceBlockId
+    )
+
+    if (!annotationBlock) {
+      console.warn('No annotation block found for sourceBlockId:', sourceBlockId)
+      return
+    }
+
+    // Get existing annotations and append new ones
+    const existingAnnotationsJson = annotationBlock.props?.annotationsJson || '[]'
+    const existingAnnotations: Annotation[] = JSON.parse(existingAnnotationsJson)
+    const allAnnotations = [...existingAnnotations, ...newAnnotations]
+
+    // Update the annotation block
+    this.editor.updateBlock(annotationBlock.id, {
+      props: {
+        ...annotationBlock.props,
+        annotationsJson: JSON.stringify(allAnnotations),
+      },
+    })
+  }
+
+  updateAnnotationBlock = (annotationBlockId: string, newAnnotations: Annotation[]) => {
+    if (!this.editor) {
+      console.warn('Editor not initialized')
+      return
+    }
+
+    // Find the annotation block and update its annotations
+    const doc: any[] = (this.editor as any).document
+    const annotationBlock = doc.find((b: any) => b.id === annotationBlockId && b.type === 'annotation')
+
+    if (annotationBlock) {
+      this.editor.updateBlock(annotationBlockId, {
+        props: {
+          ...annotationBlock.props,
+          annotationsJson: JSON.stringify(newAnnotations),
+        },
+      })
+    }
+  }
+
   render(): React.ReactNode {
+    const contextValue = {
+      onFetchMoreAnnotations: this.props.onFetchMoreAnnotations,
+    }
+
     return (
       <InternalBlockNote
         initialContent={this.props.initialContent}
         onEditorReady={this.handleEditorReady}
+        contextValue={contextValue}
       />
     )
   }

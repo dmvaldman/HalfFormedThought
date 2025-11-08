@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useContext } from 'react'
 import { Block } from '@blocknote/core'
 import { createReactBlockSpec } from '@blocknote/react'
 import { Annotation } from './types'
+import { BlockNoteContext } from './BlockNoteWrapper'
 
 interface AnnotationBlockProps {
   block: Block
@@ -10,8 +11,13 @@ interface AnnotationBlockProps {
 
 const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, editor }) => {
   const [isExpanded, setIsExpanded] = useState(false)
+  const [isFetching, setIsFetching] = useState(false)
   const annotationsJson = (block.props as any)?.annotationsJson || '[]'
+  const sourceBlockId = (block.props as any)?.sourceBlockId || ''
   const annotations: Annotation[] = JSON.parse(annotationsJson)
+
+  // Get callback from context instead of editor
+  const { onFetchMoreAnnotations } = useContext(BlockNoteContext)
 
   const handleDelete = (index: number) => {
     const updatedAnnotations = annotations.filter((_, i) => i !== index)
@@ -25,6 +31,18 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, editor }) => {
 
   const toggleExpand = () => {
     setIsExpanded(!isExpanded)
+  }
+
+  const handleFetchMore = async () => {
+    if (!onFetchMoreAnnotations || !sourceBlockId || isFetching) return
+
+    setIsFetching(true)
+    try {
+      await onFetchMoreAnnotations(sourceBlockId, annotations)
+    } catch (error) {
+      console.error('Error fetching more annotations:', error)
+    }
+    setIsFetching(false)
   }
 
   if (annotations.length === 0) {
@@ -84,6 +102,18 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, editor }) => {
                 )}
               </div>
             ))}
+
+            {/* Fetch more button */}
+            {sourceBlockId && (
+              <button
+                className="annotation-block-fetch-more"
+                onClick={handleFetchMore}
+                disabled={isFetching}
+                title="Fetch more annotations"
+              >
+                {isFetching ? '...' : '>'}
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -98,6 +128,9 @@ export const annotationBlockSpec = createReactBlockSpec(
     propSchema: {
       annotationsJson: {
         default: '[]',
+      },
+      sourceBlockId: {
+        default: '',
       },
     },
     content: 'none',

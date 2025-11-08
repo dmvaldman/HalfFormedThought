@@ -338,6 +338,30 @@ body {
   line-height: 1.4;
 }
 
+.annotation-block-fetch-more {
+  min-width: 50px;
+  padding: 12px;
+  background-color: #252525;
+  border: 1px solid var(--dark-gray);
+  border-radius: 4px;
+  color: var(--white);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.annotation-block-fetch-more:hover:not(:disabled) {
+  background-color: var(--dark-gray);
+}
+
+.annotation-block-fetch-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Analysis Spinner */
 .analysis-spinner {
   position: fixed;
