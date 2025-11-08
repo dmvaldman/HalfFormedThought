@@ -247,15 +247,11 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
             rows={1}
           />
           <button
-            className={`analyze-button ${isAnalyzing ? 'loading' : ''}`}
+            className="analyze-button"
             onClick={this.handleAnalyzeAll}
             disabled={isAnalyzing}
           >
-            {isAnalyzing ? (
-              <span className="spinner">⟳</span>
-            ) : (
-              'Analyze'
-            )}
+            Analyze
           </button>
         </div>
         <div className="note-content-container" ref={this.contentContainerRef}>
@@ -277,7 +273,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         </div>
         {isAnalyzing && (
           <div className="analysis-spinner">
-            <div className="spinner-icon">⟳</div>
+            <div className="spinner-icon"></div>
           </div>
         )}
       </div>

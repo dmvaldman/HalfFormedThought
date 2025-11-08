@@ -8,7 +8,6 @@
   --dark-gray: #333;
 
   /* Accent Colors */
-  --accent-blue: #4a9eff;
   --accent-cyan: #61dafb;
   --accent-red: #ff4444;
 
@@ -38,8 +37,14 @@ body {
   height: 100vh;
 }
 
+/* BlockNote styling overrides */
 .bn-editor {
   background: transparent;
+}
+
+/* Remove outline on selected annotation blocks */
+.ProseMirror-selectednode > .bn-block-content > * {
+  outline: none !important;
 }
 
 .app {
@@ -214,20 +219,6 @@ body {
   opacity: 0.7;
 }
 
-.analyze-button .spinner {
-  display: inline-block;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .note-content-container {
   flex: 1;
   padding: 24px 32px;
@@ -304,7 +295,7 @@ body {
 .annotation-block-source {
   font-size: 12px;
   font-weight: bold;
-  color: var(--accent-blue);
+  color: var(--accent-cyan);
   margin-bottom: 4px;
 }
 
@@ -345,9 +336,13 @@ body {
 }
 
 .spinner-icon {
-  font-size: 20px;
-  color: var(--accent-cyan);
-  animation: spin 1s linear infinite;
+  width: 24px;
+  height: 24px;
+  border: 3px solid transparent;
+  border-top: 3px solid var(--accent-cyan);
+  border-right: 3px solid var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
 
 @keyframes spin {
