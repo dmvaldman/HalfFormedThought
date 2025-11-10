@@ -1,6 +1,7 @@
 import React, { Component, RefObject } from 'react'
-import BlockNoteWrapper, { BlockNoteWrapperHandle } from './BlockNoteWrapper'
-import { Note } from './types'
+import BlockNoteWrapper from './BlockNoteWrapper'
+import type { BlockNoteEditor } from '@blocknote/core'
+import { Note, Annotation } from './types'
 import { analyzeNote, analyzeBlock } from './analyzer'
 
 interface NoteEditorProps {
@@ -22,7 +23,8 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   private titleTextareaRef: RefObject<HTMLTextAreaElement | null>
   private contentContainerRef: RefObject<HTMLDivElement | null>
   private blockAnalysisStatus: Map<string, BlockAnalysisStatus> = new Map()
-  private blockNoteRef = React.createRef<BlockNoteWrapperHandle>()
+  private editor: BlockNoteEditor | null = null
+  private unsubscribeChange: (() => void) | null = null
   private blocks: any[] = []
 
   constructor(props: NoteEditorProps) {
@@ -57,6 +59,85 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     // Initialize blocks from note content
     if (this.props.note) {
       this.blocks = Array.isArray(this.props.note.content) ? this.props.note.content : []
+    }
+  }
+
+  // Centralized paste handling in the editor class
+  handlePaste = ({ event, editor, defaultPasteHandler }: { event: ClipboardEvent, editor: any, defaultPasteHandler: (opts?: any) => any }): boolean => {
+    const plainText = event.clipboardData?.getData('text/plain')
+    if (plainText) {
+      const lines = plainText.split('\n')
+      const blocksToInsert = lines.map(line => ({
+        type: 'paragraph' as const,
+        content: line ? [{ type: 'text' as const, text: line }] : [],
+      }))
+
+      const selection = editor.getSelection()
+      const currentBlock = selection?.blocks[0] || editor.getTextCursorPosition()?.block
+
+      if (currentBlock && blocksToInsert.length > 0) {
+        editor.insertBlocks(blocksToInsert, currentBlock, 'after')
+        if (currentBlock.type === 'paragraph') {
+          const currentContent = currentBlock.content
+          if (Array.isArray(currentContent)) {
+            const currentText = currentContent.map((n: any) => n.text || '').join('')
+            if (currentText.trim() === '') {
+              editor.removeBlocks([currentBlock])
+            }
+          }
+        }
+        return true
+      }
+    }
+    return defaultPasteHandler({ plainTextAsMarkdown: true })
+  }
+
+  private isParagraphEmpty = (block: any): boolean => {
+    if (!block || block.type !== 'paragraph') return false
+    const inlines = block.content || []
+    const text = inlines.map((n: any) => (n.text || '')).join('')
+    return text.trim() === ''
+  }
+
+  private handleEditorReady = (editor: BlockNoteEditor) => {
+    this.editor = editor
+    if (this.unsubscribeChange) {
+      this.unsubscribeChange()
+      this.unsubscribeChange = null
+    }
+    this.unsubscribeChange = (editor as any).onChange((editor: BlockNoteEditor, { getChanges }: { getChanges?: () => any[] }) => {
+      // Update blocks and persist
+      const doc = (editor as any).document
+      this.blocks = doc
+      if (this.props.note) {
+        this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
+      }
+      // Detect double-enter and trigger analysis
+      if (getChanges) {
+        const changes = getChanges()
+        for (const ch of changes) {
+          if (ch.type !== 'insert') continue
+          const inserted = ch.block as any
+          if (!inserted || inserted.type !== 'paragraph') continue
+          const docArr = (editor as any).document as any[]
+          const idx = docArr.findIndex((b: any) => b.id === inserted.id)
+          if (idx < 2) continue
+          const prev = docArr[idx - 1]
+          const prevPrev = docArr[idx - 2]
+          const isPrevEmpty = this.isParagraphEmpty(prev)
+          const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !this.isParagraphEmpty(prevPrev)
+          if (isPrevEmpty && isPrevPrevNonEmpty) {
+            this.triggerAnalysis(prevPrev.id)
+          }
+        }
+      }
+    })
+  }
+
+  componentWillUnmount(): void {
+    if (this.unsubscribeChange) {
+      this.unsubscribeChange()
+      this.unsubscribeChange = null
     }
   }
 
@@ -160,7 +241,21 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         // Insert annotation block after the last block in the collapsed group
         const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
         console.log('[NoteEditor.triggerAnalysis] Inserting annotation block after:', lastBlockIdInCollapsed, 'with sourceBlockId:', currentBlock.id)
-        this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, annotations, currentBlock.id)
+        if (this.editor) {
+          ;(this.editor as any).insertBlocks(
+            [
+              {
+                type: 'annotation' as any,
+                props: {
+                  annotationsJson: JSON.stringify(annotations),
+                  sourceBlockId: currentBlock.id,
+                },
+              } as any,
+            ],
+            lastBlockIdInCollapsed,
+            'after'
+          )
+        }
         // Mark the block as analyzed and clean (use the collapsed block's ID)
         this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
       }
@@ -196,7 +291,20 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
 
       if (annotations.length > 0) {
         console.log('[NoteEditor.triggerAnalysisForAnnotationBlock] Appending to annotation block:', annotationBlockId)
-        this.blockNoteRef.current?.appendAnnotation(annotationBlockId, annotations)
+        if (this.editor) {
+          const doc: any[] = (this.editor as any).document
+          const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
+          if (annotationBlock) {
+            const existing: Annotation[] = JSON.parse(annotationBlock.props?.annotationsJson || '[]')
+            const all = [...existing, ...annotations]
+            ;(this.editor as any).updateBlock(annotationBlock.id, {
+              props: {
+                ...annotationBlock.props,
+                annotationsJson: JSON.stringify(all),
+              },
+            })
+          }
+        }
       }
     } catch (error) {
       console.error('Error analyzing block:', error)
@@ -230,7 +338,21 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         if (annotations.length > 0) {
           // Insert annotation block after the last block in the collapsed group
           const lastBlockIdInCollapsed = collapsedBlock.collapsedIds[collapsedBlock.collapsedIds.length - 1] || collapsedBlock.id
-          this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, annotations, blockId)
+          if (this.editor) {
+            ;(this.editor as any).insertBlocks(
+              [
+                {
+                  type: 'annotation' as any,
+                  props: {
+                    annotationsJson: JSON.stringify(annotations),
+                    sourceBlockId: blockId,
+                  },
+                } as any,
+              ],
+              lastBlockIdInCollapsed,
+              'after'
+            )
+          }
 
           // Mark the block as analyzed and clean
           this.blockAnalysisStatus.set(blockId, { isDirty: false, isAnalyzed: true })
@@ -279,19 +401,9 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         </div>
         <div className="note-content-container" ref={this.contentContainerRef}>
           <BlockNoteWrapper
-            ref={this.blockNoteRef}
             initialContent={Array.isArray(note.content) ? note.content : []}
-            onUpdate={(blocks) => {
-              this.blocks = blocks
-              if (this.props.note) {
-                this.props.onUpdateNote(this.props.note.id, this.state.title, blocks)
-              }
-            }}
-            onDoubleEnter={(finishedBlockId) => {
-              console.log('onDoubleEnter called', finishedBlockId)
-              // Trigger analysis for the finished collapsed block
-              this.triggerAnalysis(finishedBlockId)
-            }}
+            pasteHandler={this.handlePaste}
+            onEditorReady={this.handleEditorReady}
             onFetchMoreAnnotations={(annotationBlockId, sourceBlockId, currentAnnotations) => {
               // Analyze the source block and append results to this specific annotation block
               this.triggerAnalysisForAnnotationBlock(annotationBlockId, sourceBlockId, currentAnnotations)

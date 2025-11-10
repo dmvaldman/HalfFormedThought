@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, createContext } from 'react'
+import { createContext, useRef } from 'react'
 import { BlockNoteView } from '@blocknote/mantine'
 import type { BlockNoteEditor } from '@blocknote/core'
 import { useCreateBlockNote } from '@blocknote/react'
@@ -7,45 +7,33 @@ import { annotationBlockSpec } from './AnnotationBlock'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 
-type Block = any
-
 import { Annotation } from './types'
 
-// Context to pass callbacks to custom blocks
-export const BlockNoteContext = createContext<{
+export interface BlockNoteCallbacks {
+  onEditorReady?: (editor: BlockNoteEditor) => void
   onFetchMoreAnnotations?: (annotationBlockId: string, sourceBlockId: string, currentAnnotations: Annotation[]) => void | Promise<void>
-}>({})
-
-
-export interface BlockNoteWrapperHandle {
-  insertAnnotationAfter: (afterBlockId: string, annotations: Annotation[], sourceBlockId: string) => void
-  appendAnnotation: (annotationBlockId: string, newAnnotations: Annotation[]) => void
-  updateAnnotationBlock: (annotationBlockId: string, newAnnotations: Annotation[]) => void
 }
 
-interface BlockNoteWrapperProps {
+export const BlockNoteContext = createContext<Pick<BlockNoteCallbacks, 'onFetchMoreAnnotations'>>({})
+
+type PasteHandlerArgs = {
+  event: ClipboardEvent
+  editor: any
+  defaultPasteHandler: (opts?: any) => any
+}
+type PasteHandler = (args: PasteHandlerArgs) => boolean
+
+interface BlockNoteWrapperProps extends BlockNoteCallbacks {
   initialContent: any[] | undefined
-  onUpdate: (content: any) => void
-  onDoubleEnter: (finishedBlockId: string) => void
-  onFetchMoreAnnotations?: (annotationBlockId: string, sourceBlockId: string, currentAnnotations: Annotation[]) => void | Promise<void>
+  pasteHandler?: PasteHandler
 }
 
-const isParagraphEmpty = (block: Block): boolean => {
-  if (!block || block.type !== 'paragraph') return false
-  const inlines = block.content || []
-  const text = inlines.map((n: any) => (n.text || '')).join('')
-  return text.trim() === ''
-}
-
-function InternalBlockNote({
+const BlockNoteWrapper = ({
   initialContent,
   onEditorReady,
-  contextValue,
-}: {
-  initialContent: any[] | undefined
-  onEditorReady: (ed: BlockNoteEditor) => void
-  contextValue: { onFetchMoreAnnotations?: (sourceBlockId: string, currentAnnotations: Annotation[]) => Promise<void> }
-}) {
+  onFetchMoreAnnotations,
+  pasteHandler,
+}: BlockNoteWrapperProps) => {
   const schema = BlockNoteSchema.create({
     blockSpecs: {
       ...defaultBlockSpecs,
@@ -56,177 +44,54 @@ function InternalBlockNote({
   const editor = useCreateBlockNote({
     schema,
     initialContent: initialContent && initialContent.length > 0 ? initialContent : undefined,
-    pasteHandler: ({ event, editor, defaultPasteHandler }) => {
-      const plainText = event.clipboardData?.getData('text/plain')
-      if (plainText) {
-        // Split by newlines and create a paragraph block for each line (preserving empty lines)
-        const lines = plainText.split('\n')
-        const blocksToInsert = lines.map(line => ({
-          type: 'paragraph' as const,
-          content: line ? [{ type: 'text' as const, text: line }] : [],
-        }))
+    pasteHandler: pasteHandler
+      ? (args) => pasteHandler(args as PasteHandlerArgs)
+      : ({ event, editor, defaultPasteHandler }) => {
+          const plainText = event.clipboardData?.getData('text/plain')
+          if (plainText) {
+            const lines = plainText.split('\n')
+            const blocksToInsert = lines.map(line => ({
+              type: 'paragraph' as const,
+              content: line ? [{ type: 'text' as const, text: line }] : [],
+            }))
 
-        // Get current selection to insert after
-        const selection = editor.getSelection()
-        const currentBlock = selection?.blocks[0] || editor.getTextCursorPosition()?.block
+            const selection = editor.getSelection()
+            const currentBlock = selection?.blocks[0] || editor.getTextCursorPosition()?.block
 
-        if (currentBlock && blocksToInsert.length > 0) {
-          editor.insertBlocks(blocksToInsert, currentBlock, 'after')
-          // Remove the current block if it's empty (we're replacing it)
-          if (currentBlock.type === 'paragraph') {
-            const currentContent = currentBlock.content
-            if (Array.isArray(currentContent)) {
-              const currentText = currentContent.map((n: any) => n.text || '').join('')
-              if (currentText.trim() === '') {
-                editor.removeBlocks([currentBlock])
+            if (currentBlock && blocksToInsert.length > 0) {
+              editor.insertBlocks(blocksToInsert, currentBlock, 'after')
+              if (currentBlock.type === 'paragraph') {
+                const currentContent = currentBlock.content
+                if (Array.isArray(currentContent)) {
+                  const currentText = currentContent.map((n: any) => n.text || '').join('')
+                  if (currentText.trim() === '') {
+                    editor.removeBlocks([currentBlock])
+                  }
+                }
               }
+              return true
             }
           }
-          return true // We handled the paste
-        }
-      }
-      // Fall back to default handler for other content types
-      return defaultPasteHandler({ plainTextAsMarkdown: true })
-    },
+          return defaultPasteHandler({ plainTextAsMarkdown: true })
+        },
   })
-  // Call once per mount when editor is ready
-  const hasCalledReady = useRef(false)
-  useEffect(() => {
-    if (!hasCalledReady.current) {
-      hasCalledReady.current = true
-      onEditorReady(editor as any) // Type assertion for custom schema
-    }
-  }, [editor, onEditorReady])
+
+  // Call onEditorReady once
+  const didReadyRef = useRef(false)
+  if (!didReadyRef.current && onEditorReady) {
+    onEditorReady(editor as unknown as BlockNoteEditor)
+    didReadyRef.current = true
+  }
+
+  const contextValue = {
+    onFetchMoreAnnotations,
+  }
+
   return (
     <BlockNoteContext.Provider value={contextValue}>
       <BlockNoteView editor={editor} />
     </BlockNoteContext.Provider>
   )
-}
-
-class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements BlockNoteWrapperHandle {
-  private editor: BlockNoteEditor | null = null
-  private cleanupOnChange: (() => void) | null = null
-  private cleanupOnUpdate: (() => void) | null = null
-
-  private handleEditorReady = (ed: BlockNoteEditor) => {
-    if (this.editor) return
-    console.log('handleEditorReady called', ed)
-    this.editor = ed as any // Type assertion needed for custom schema
-
-    // Forward updates upstream
-    this.cleanupOnUpdate = (this.editor as any).onChange((editor: BlockNoteEditor) => {
-      this.props.onUpdate(editor.document)
-    })
-    // Detect double-Enter via insert events
-    this.cleanupOnChange = (this.editor as any).onChange((editor: BlockNoteEditor, { getChanges }: { getChanges: () => any[] }) => {
-      const changes = getChanges()
-      for (const ch of changes) {
-        if (ch.type !== 'insert') continue
-        const inserted = ch.block as Block
-        if (!inserted || inserted.type !== 'paragraph') continue
-        const doc: Block[] = editor.document
-        const idx = doc.findIndex((b: Block) => b.id === inserted.id)
-        if (idx < 2) continue
-        const prev = doc[idx - 1]
-        const prevPrev = doc[idx - 2]
-        const isPrevEmpty = isParagraphEmpty(prev)
-        const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !isParagraphEmpty(prevPrev)
-        if (isPrevEmpty && isPrevPrevNonEmpty) {
-          this.props.onDoubleEnter(prevPrev.id)
-        }
-      }
-    })
-  }
-
-  componentWillUnmount(): void {
-    if (this.cleanupOnChange) this.cleanupOnChange()
-    if (this.cleanupOnUpdate) this.cleanupOnUpdate()
-  }
-
-  insertAnnotationAfter = (afterBlockId: string, annotations: Annotation[], sourceBlockId: string) => {
-    if (!this.editor) {
-      console.warn('Editor not initialized')
-      return
-    }
-
-    if (annotations.length === 0) {
-      return
-    }
-
-    // Store annotations as JSON string since BlockNote props only support primitives
-    this.editor.insertBlocks(
-      [
-        {
-          type: 'annotation' as any,
-          props: {
-            annotationsJson: JSON.stringify(annotations),
-            sourceBlockId: sourceBlockId,
-          },
-        } as any,
-      ],
-      afterBlockId,
-      'after'
-    )
-  }
-
-  appendAnnotation = (annotationBlockId: string, newAnnotations: Annotation[]) => {
-    if (!this.editor) {
-      console.warn('Editor not initialized')
-      return
-    }
-
-    const doc: any[] = (this.editor as any).document
-    const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
-
-    if (!annotationBlock) {
-      console.warn('No annotation block found with ID:', annotationBlockId)
-      return
-    }
-
-    const existing: Annotation[] = JSON.parse(annotationBlock.props?.annotationsJson || '[]')
-    const all = [...existing, ...newAnnotations]
-
-    this.editor.updateBlock(annotationBlock.id, {
-      props: {
-        ...annotationBlock.props,
-        annotationsJson: JSON.stringify(all),
-      },
-    })
-  }
-
-  updateAnnotationBlock = (annotationBlockId: string, newAnnotations: Annotation[]) => {
-    if (!this.editor) {
-      console.warn('Editor not initialized')
-      return
-    }
-
-    const doc: any[] = (this.editor as any).document
-    const annotationBlock = doc.find((b: any) => b.id === annotationBlockId && b.type === 'annotation')
-
-    if (annotationBlock) {
-      this.editor.updateBlock(annotationBlockId, {
-        props: {
-          ...annotationBlock.props,
-          annotationsJson: JSON.stringify(newAnnotations),
-        },
-      })
-    }
-  }
-
-  render(): React.ReactNode {
-    const contextValue = {
-      onFetchMoreAnnotations: this.props.onFetchMoreAnnotations,
-    }
-
-    return (
-      <InternalBlockNote
-        initialContent={this.props.initialContent}
-        onEditorReady={this.handleEditorReady}
-        contextValue={contextValue}
-      />
-    )
-  }
 }
 
 export default BlockNoteWrapper
