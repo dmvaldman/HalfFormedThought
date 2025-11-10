@@ -234,6 +234,10 @@ class Editor extends Component<EditorProps, EditorState> {
       initialContent: Array.isArray(note.content) && note.content.length > 0 ? note.content : undefined,
       pasteHandler: ({ event, editor, defaultPasteHandler }: { event: ClipboardEvent; editor: any; defaultPasteHandler: (opts?: any) => any }) =>
         this.handlePaste({ event, editor, defaultPasteHandler }),
+      placeholders: {
+        emptyDocument: 'Your germ of an idea...',
+        default: ''
+      }
     }) as BlockNoteEditor
 
     this.editor = editor
