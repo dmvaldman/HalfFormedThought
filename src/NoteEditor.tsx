@@ -1,7 +1,6 @@
 import React, { Component, RefObject } from 'react'
 import BlockNoteWrapper, { BlockNoteWrapperHandle } from './BlockNoteWrapper'
 import { Note } from './types'
-import { createAnnotationFromAPI } from './annotations'
 import { analyzeNote, analyzeBlock } from './analyzer'
 
 interface NoteEditorProps {
@@ -155,15 +154,13 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       }
 
       // Call analyzeBlock for new analysis
-      const apiAnnotations = await analyzeBlock(collapsedBlocks, currentBlock, [])
+      const annotations = await analyzeBlock(collapsedBlocks, currentBlock, [])
 
-      if (apiAnnotations.length > 0) {
-        const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
-
+      if (annotations.length > 0) {
         // Insert annotation block after the last block in the collapsed group
         const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
         console.log('[NoteEditor.triggerAnalysis] Inserting annotation block after:', lastBlockIdInCollapsed, 'with sourceBlockId:', currentBlock.id)
-        this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, newAnnotations, currentBlock.id)
+        this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, annotations, currentBlock.id)
         // Mark the block as analyzed and clean (use the collapsed block's ID)
         this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
       }
@@ -195,12 +192,11 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       }
 
       // Call analyzeBlock with existing annotations to get more
-      const apiAnnotations = await analyzeBlock(collapsedBlocks, currentBlock, existingAnnotations)
+      const annotations = await analyzeBlock(collapsedBlocks, currentBlock, existingAnnotations)
 
-      if (apiAnnotations.length > 0) {
-        const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
+      if (annotations.length > 0) {
         console.log('[NoteEditor.triggerAnalysisForAnnotationBlock] Appending to annotation block:', annotationBlockId)
-        this.blockNoteRef.current?.appendAnnotation(annotationBlockId, newAnnotations)
+        this.blockNoteRef.current?.appendAnnotation(annotationBlockId, annotations)
       }
     } catch (error) {
       console.error('Error analyzing block:', error)
@@ -229,15 +225,12 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       // Insert annotation callouts for each block that has annotations
       for (const collapsedBlock of collapsedBlocks) {
         const blockId = collapsedBlock.id
-        const apiAnnotations = annotationsByBlockId[blockId] || []
+        const annotations = annotationsByBlockId[blockId] || []
 
-        if (apiAnnotations.length > 0) {
-          // Convert API annotations to our format
-          const newAnnotations = apiAnnotations.map(createAnnotationFromAPI)
-
+        if (annotations.length > 0) {
           // Insert annotation block after the last block in the collapsed group
           const lastBlockIdInCollapsed = collapsedBlock.collapsedIds[collapsedBlock.collapsedIds.length - 1] || collapsedBlock.id
-          this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, newAnnotations, blockId)
+          this.blockNoteRef.current?.insertAnnotationAfter(lastBlockIdInCollapsed, annotations, blockId)
 
           // Mark the block as analyzed and clean
           this.blockAnalysisStatus.set(blockId, { isDirty: false, isAnalyzed: true })

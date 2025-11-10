@@ -1,5 +1,4 @@
 export interface Annotation {
-  id: string
   description?: string
   relevance?: string
   source?: string
