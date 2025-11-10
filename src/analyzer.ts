@@ -18,15 +18,18 @@ where annotations is an array (0-3 in length) of {description, relevance, source
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
 `.trim()
 
-// Configuration: choose API provider ('together' or 'kimi')
+const temperature = 0.6
+
+// Configuration: choose API provider ('together', 'kimi', or 'openrouter')
 // NOTE: 'kimi' requires a backend proxy due to CORS restrictions - direct browser access is blocked
-// Use 'together' for direct browser access without a proxy
-const API_PROVIDER: 'together' | 'kimi' = 'together'
+// Use 'together' or 'openrouter' for direct browser access without a proxy
+const API_PROVIDER: 'together' | 'kimi' | 'openrouter' = 'together'
 
 // Model names differ between providers
 const MODEL_NAMES = {
-  together: 'moonshotai/Kimi-K2-Instruct',
-  kimi: 'kimi-k2-0905-preview'
+  together: 'moonshotai/Kimi-K2-Instruct-0905',
+  kimi: 'kimi-k2-0905-preview',
+  openrouter: 'moonshotai/kimi-k2-0905'
 }
 
 // JSON Schema for annotations response (for Together.ai JSON mode)
@@ -50,6 +53,40 @@ const ANNOTATIONS_SCHEMA = {
   required: ['annotations']
 }
 
+// OpenRouter structured output format for annotations
+const OPENROUTER_ANNOTATIONS_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'annotations',
+    strict: true,
+    schema: ANNOTATIONS_SCHEMA
+  }
+}
+
+// JSON Schema for list items response
+const LIST_ITEMS_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: {
+      type: 'array',
+      items: {
+        type: 'string'
+      }
+    }
+  },
+  required: ['items']
+}
+
+// OpenRouter structured output format for list items
+const OPENROUTER_LIST_ITEMS_SCHEMA = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'list_items',
+    strict: true,
+    schema: LIST_ITEMS_SCHEMA
+  }
+}
+
 // Initialize API clients
 const together = new Together({
   apiKey: (import.meta as any).env?.VITE_TOGETHER_API_KEY || '',
@@ -61,9 +98,21 @@ const kimi = new OpenAI({
   dangerouslyAllowBrowser: true, // Required for browser environments
 })
 
-async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true) {
+const openrouter = new OpenAI({
+  apiKey: (import.meta as any).env?.VITE_OPENROUTER_API_KEY || '',
+  baseURL: 'https://openrouter.ai/api/v1',
+  dangerouslyAllowBrowser: true,
+  defaultHeaders: {
+    'HTTP-Referer': window.location.origin,
+    'X-Title': 'Half-Formed Thought'
+  }
+})
+
+async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations') {
   if (API_PROVIDER === 'kimi') {
     return callKimiAPI(userPrompt, onStreamChunk, stream)
+  } else if (API_PROVIDER === 'openrouter') {
+    return callOpenRouterAPI(userPrompt, onStreamChunk, stream, schemaType)
   } else {
     return callTogetherAPI(userPrompt, onStreamChunk, stream)
   }
@@ -79,7 +128,7 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.6,
+      temperature: temperature,
       response_format: { type: 'json_schema', schema: ANNOTATIONS_SCHEMA },
       reasoning_effort: "high",
       stream: true
@@ -107,7 +156,7 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.6,
+      temperature: temperature,
       response_format: { type: 'json_schema', schema: ANNOTATIONS_SCHEMA },
       reasoning_effort: "high",
       stream: false
@@ -126,7 +175,7 @@ async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) 
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.6,
+      temperature: temperature,
       response_format: { type: 'json_object' },
       stream: true
     })
@@ -153,11 +202,65 @@ async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) 
         { role: 'system', content: SYSTEM_PROMPT },
         { role: 'user', content: userPrompt }
       ],
-      temperature: 0.8,
+      temperature: temperature,
       response_format: { type: 'json_object' },
       stream: false
     })
 
+    const fullResponse = response.choices[0]?.message?.content || ''
+    return parseResponse(fullResponse)
+  }
+}
+
+async function callOpenRouterAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations') {
+  console.log('userPrompt\n\n', userPrompt)
+
+  // Select the appropriate schema based on schemaType
+  const responseFormat = schemaType === 'annotations'
+    ? OPENROUTER_ANNOTATIONS_SCHEMA
+    : OPENROUTER_LIST_ITEMS_SCHEMA
+
+  // OpenRouter-specific body options
+  const requestOptions: any = {
+    model: MODEL_NAMES.openrouter,
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userPrompt }
+    ],
+    temperature: temperature,
+    response_format: responseFormat,
+    stream,
+    provider: {
+      sort: 'throughput'
+    }
+  }
+
+  if (stream) {
+    const streamResponse = await openrouter.chat.completions.create({
+      ...requestOptions,
+      stream: true
+    })
+
+    let fullResponse = ''
+    let currentBuffer = ''
+
+    for await (const chunk of streamResponse as any) {
+      const content = chunk.choices[0]?.delta?.content || ''
+      if (content) {
+        fullResponse += content
+        currentBuffer += content
+        if (onStreamChunk) {
+          onStreamChunk(currentBuffer)
+        }
+      }
+    }
+
+    return parseResponse(fullResponse)
+  } else {
+    const response = await openrouter.chat.completions.create({
+      ...requestOptions,
+      stream: false
+    })
     const fullResponse = response.choices[0]?.message?.content || ''
     return parseResponse(fullResponse)
   }
@@ -350,7 +453,7 @@ Generate 3-5 more items that match the style, theme, and tone of the existing li
 Form your response as JSON {items: [item1, item2, ...]} where items is a NON-EMPTY array of strings, each string being a new list item that matches the style and theme of the existing items.
 `.trim()
 
-  const parsed = await callAPI(userPrompt, undefined, false)
+  const parsed = await callAPI(userPrompt, undefined, false, 'list_items')
 
   // Ensure we always return an array
   if (!parsed.items) {
