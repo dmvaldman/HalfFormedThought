@@ -1,6 +1,6 @@
 import { Component } from 'react'
 import Sidebar from './Sidebar'
-import NoteEditor from './NoteEditor'
+import Editor from './Editor'
 import { Note } from './types'
 import { loadNotes, saveNotes, generateId } from './storage'
 import { debounce } from './utils'
@@ -35,7 +35,7 @@ class App extends Component<{}, AppState> {
     const newNote: Note = {
       id: generateId(),
       title: '',
-      content: [], // BlockNote format: array, not { blocks: [] }
+      content: [],
       createdAt: now,
       updatedAt: now,
     }
@@ -85,7 +85,7 @@ class App extends Component<{}, AppState> {
           onCreateNote={this.handleCreateNote}
           onDeleteNote={this.handleDeleteNote}
         />
-        <NoteEditor note={currentNote} onUpdateNote={this.handleUpdateNote} />
+        <Editor note={currentNote} onUpdateNote={this.handleUpdateNote} />
       </div>
     )
   }

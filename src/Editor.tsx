@@ -1,17 +1,21 @@
 import React, { Component, RefObject } from 'react'
-import BlockNoteWrapper from './BlockNoteWrapper'
-import type { BlockNoteEditor } from '@blocknote/core'
+import { BlockNoteEditor, BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core'
+import { BlockNoteView } from '@blocknote/mantine'
+import { annotationBlockSpec, setAnnotationCallback } from './AnnotationBlock'
+import '@blocknote/core/fonts/inter.css'
+import '@blocknote/mantine/style.css'
 import { Note, Annotation } from './types'
 import { analyzeNote, analyzeBlock } from './analyzer'
 
-interface NoteEditorProps {
+interface EditorProps {
   note: Note | null
   onUpdateNote: (noteId: string, title: string, content: any) => void
 }
 
-interface NoteEditorState {
+interface EditorState {
   title: string
   isAnalyzing: boolean
+  editor: any
 }
 
 interface BlockAnalysisStatus {
@@ -19,34 +23,34 @@ interface BlockAnalysisStatus {
   isAnalyzed: boolean
 }
 
-class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
+class Editor extends Component<EditorProps, EditorState> {
+  private editor: any = null
+  private blocks: any[] = []
   private titleTextareaRef: RefObject<HTMLTextAreaElement | null>
   private contentContainerRef: RefObject<HTMLDivElement | null>
   private blockAnalysisStatus: Map<string, BlockAnalysisStatus> = new Map()
-  private editor: BlockNoteEditor | null = null
   private unsubscribeChange: (() => void) | null = null
-  private blocks: any[] = []
 
-  constructor(props: NoteEditorProps) {
+  constructor(props: EditorProps) {
     super(props)
     this.titleTextareaRef = React.createRef<HTMLTextAreaElement>()
     this.contentContainerRef = React.createRef<HTMLDivElement>()
     this.state = {
       title: props.note?.title || '',
       isAnalyzing: false,
+      editor: null,
     }
   }
 
-  componentDidUpdate(prevProps: NoteEditorProps) {
+  componentDidUpdate(prevProps: EditorProps) {
     if (prevProps.note?.id !== this.props.note?.id) {
-      // Clear analysis status when switching notes
       this.blockAnalysisStatus.clear()
-      // Initialize blocks from note content
       this.blocks = Array.isArray(this.props.note?.content) ? this.props.note.content : []
       this.setState({
         title: this.props.note?.title || '',
         isAnalyzing: false,
       })
+      this.initializeNote(this.props.note)
     }
 
     if (this.titleTextareaRef.current) {
@@ -56,14 +60,31 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   }
 
   componentDidMount() {
-    // Initialize blocks from note content
     if (this.props.note) {
       this.blocks = Array.isArray(this.props.note.content) ? this.props.note.content : []
     }
+    this.initializeNote(this.props.note)
   }
 
-  // Centralized paste handling in the editor class
-  handlePaste = ({ event, editor, defaultPasteHandler }: { event: ClipboardEvent, editor: any, defaultPasteHandler: (opts?: any) => any }): boolean => {
+  componentWillUnmount(): void {
+    this.destroy(false)
+  }
+
+  private destroy(updateState: boolean = true) {
+    if (this.unsubscribeChange) {
+      this.unsubscribeChange()
+      this.unsubscribeChange = null
+    }
+    if (this.editor && typeof this.editor.destroy === 'function') {
+      this.editor.destroy()
+    }
+    this.editor = null
+    if (updateState) {
+      this.setState({ editor: null })
+    }
+  }
+
+  handlePaste = ({ event, editor, defaultPasteHandler }: { event: ClipboardEvent; editor: any; defaultPasteHandler: (opts?: any) => any }): boolean => {
     const plainText = event.clipboardData?.getData('text/plain')
     if (plainText) {
       const lines = plainText.split('\n')
@@ -99,27 +120,71 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     return text.trim() === ''
   }
 
-  private handleEditorReady = (editor: BlockNoteEditor) => {
-    this.editor = editor
+  private insertAnnotation = (afterBlockId: string, annotations: Annotation[], sourceBlockId: string) => {
+    if (!this.editor || annotations.length === 0) return
+    this.editor.insertBlocks(
+      [
+        {
+          type: 'annotation' as any,
+          props: {
+            annotationsJson: JSON.stringify(annotations),
+            sourceBlockId,
+          },
+        } as any,
+      ],
+      afterBlockId,
+      'after'
+    )
+  }
+
+  private appendToAnnotationBlock = (annotationBlockId: string, newAnnotations: Annotation[]) => {
+    if (!this.editor || newAnnotations.length === 0) return
+    const doc: any[] = this.editor.document
+    const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
+    if (!annotationBlock) return
+    const existing: Annotation[] = JSON.parse(annotationBlock.props?.annotationsJson || '[]')
+    const all = [...existing, ...newAnnotations]
+    this.editor.updateBlock(annotationBlock.id, {
+      props: {
+        ...annotationBlock.props,
+        annotationsJson: JSON.stringify(all),
+        isFetching: false,
+      },
+    })
+  }
+
+  private resetAnnotationFetching = (annotationBlockId: string) => {
+    if (!this.editor) return
+    const doc: any[] = this.editor.document
+    const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
+    if (annotationBlock) {
+      this.editor.updateBlock(annotationBlock.id, {
+        props: {
+          ...annotationBlock.props,
+          isFetching: false,
+        },
+      })
+    }
+  }
+
+  private attachListeners(editor: any) {
     if (this.unsubscribeChange) {
       this.unsubscribeChange()
       this.unsubscribeChange = null
     }
-    this.unsubscribeChange = (editor as any).onChange((editor: BlockNoteEditor, { getChanges }: { getChanges?: () => any[] }) => {
-      // Update blocks and persist
-      const doc = (editor as any).document
+    this.unsubscribeChange = editor.onChange((editorInstance: any, { getChanges }: { getChanges?: () => any[] }) => {
+      const doc = editorInstance.document
       this.blocks = doc
       if (this.props.note) {
         this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
       }
-      // Detect double-enter and trigger analysis
       if (getChanges) {
         const changes = getChanges()
         for (const ch of changes) {
           if (ch.type !== 'insert') continue
           const inserted = ch.block as any
           if (!inserted || inserted.type !== 'paragraph') continue
-          const docArr = (editor as any).document as any[]
+          const docArr = editorInstance.document as any[]
           const idx = docArr.findIndex((b: any) => b.id === inserted.id)
           if (idx < 2) continue
           const prev = docArr[idx - 1]
@@ -127,22 +192,49 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           const isPrevEmpty = this.isParagraphEmpty(prev)
           const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !this.isParagraphEmpty(prevPrev)
           if (isPrevEmpty && isPrevPrevNonEmpty) {
-            this.triggerAnalysis(prevPrev.id)
+            this.handleAnalysis(prevPrev.id)
           }
         }
       }
     })
   }
 
-  componentWillUnmount(): void {
-    if (this.unsubscribeChange) {
-      this.unsubscribeChange()
-      this.unsubscribeChange = null
+  private initializeNote(note: Note | null) {
+    if (!note) {
+      this.destroy()
+      this.blocks = []
+      return
     }
+
+    this.destroy()
+
+    // Set the callback before creating the schema
+    setAnnotationCallback(this.handleAnalysisForAnnotation)
+
+    // createReactBlockSpec returns a function, so we need to call it to get the spec object
+    const annotationSpec = (annotationBlockSpec as any)()
+
+    const schema = BlockNoteSchema.create({
+      blockSpecs: {
+        ...defaultBlockSpecs,
+        annotation: annotationSpec,
+      },
+    })
+
+    const editor = BlockNoteEditor.create({
+      schema,
+      initialContent: Array.isArray(note.content) && note.content.length > 0 ? note.content : undefined,
+      pasteHandler: ({ event, editor, defaultPasteHandler }: { event: ClipboardEvent; editor: any; defaultPasteHandler: (opts?: any) => any }) =>
+        this.handlePaste({ event, editor, defaultPasteHandler }),
+    }) as BlockNoteEditor
+
+    this.editor = editor
+    this.blocks = Array.isArray(note.content) ? note.content : []
+    this.attachListeners(editor)
+    this.setState({ editor })
   }
 
   getText = (block: any): string => {
-    // Extract text from BlockNote format: block.content is an array of inline content
     if (!block || !Array.isArray(block.content)) {
       return ''
     }
@@ -156,11 +248,8 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       .join('')
   }
 
-  collapseBlocks = (editorBlocks: any[]): Array<{id: string, text: string, collapsedIds: string[]}> => {
-    // Collapse consecutive non-empty paragraph blocks into logical blocks
-    // separated by empty paragraphs
-    // Works with BlockNote format: blocks have content array with { type: 'text', text: '...' } objects
-    const collapsed: Array<{id: string, text: string, collapsedIds: string[]}> = []
+  collapseBlocks = (editorBlocks: any[]): Array<{ id: string, text: string, collapsedIds: string[] }> => {
+    const collapsed: Array<{ id: string, text: string, collapsedIds: string[] }> = []
     let currentText = ''
     let currentId = ''
     let currentIds: string[] = []
@@ -172,7 +261,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         const text = this.getText(block)
 
         if (!text) {
-          // Empty block - finalize current collapsed block if any
           if (currentText.trim() !== '') {
             collapsed.push({ id: currentId, text: currentText.trim(), collapsedIds: currentIds })
             currentText = ''
@@ -180,7 +268,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
             currentIds = []
           }
         } else {
-          // Non-empty block - add to current collapsed block
           if (currentText === '') {
             currentId = block.id
             currentText = text
@@ -193,7 +280,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       }
     }
 
-    // Don't forget the last block
     if (currentText.trim() !== '') {
       collapsed.push({ id: currentId, text: currentText.trim(), collapsedIds: currentIds })
     }
@@ -201,20 +287,18 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     return collapsed
   }
 
-
   handleTitleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const title = e.target.value
     this.setState({ title })
     e.target.style.height = 'auto'
     e.target.style.height = `${e.target.scrollHeight}px`
-    // Update note immediately when title changes so sidebar reflects the change
     if (this.props.note) {
       const content = this.blocks.length > 0 ? this.blocks : this.props.note.content
       this.props.onUpdateNote(this.props.note.id, title, content)
     }
   }
 
-  triggerAnalysis = async (blockId: string) => {
+  handleAnalysis = async (blockId: string) => {
     if (!this.props.note) return
 
     this.setState({ isAnalyzing: true })
@@ -223,7 +307,6 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       const paragraphBlocks = this.blocks.filter((block: any) => block.type === 'paragraph')
       const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
 
-      // Find the collapsed block that contains this blockId
       const currentBlock = collapsedBlocks.find(b =>
         b.id === blockId || b.collapsedIds.includes(blockId)
       )
@@ -234,29 +317,12 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         return
       }
 
-      // Call analyzeBlock for new analysis
       const annotations = await analyzeBlock(collapsedBlocks, currentBlock, [])
 
       if (annotations.length > 0) {
-        // Insert annotation block after the last block in the collapsed group
         const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
-        console.log('[NoteEditor.triggerAnalysis] Inserting annotation block after:', lastBlockIdInCollapsed, 'with sourceBlockId:', currentBlock.id)
-        if (this.editor) {
-          ;(this.editor as any).insertBlocks(
-            [
-              {
-                type: 'annotation' as any,
-                props: {
-                  annotationsJson: JSON.stringify(annotations),
-                  sourceBlockId: currentBlock.id,
-                },
-              } as any,
-            ],
-            lastBlockIdInCollapsed,
-            'after'
-          )
-        }
-        // Mark the block as analyzed and clean (use the collapsed block's ID)
+        console.log('[Editor.triggerAnalysis] Inserting annotation block after:', lastBlockIdInCollapsed, 'with sourceBlockId:', currentBlock.id)
+        this.insertAnnotation(lastBlockIdInCollapsed, annotations, currentBlock.id)
         this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
       }
     } catch (error) {
@@ -266,7 +332,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     this.setState({ isAnalyzing: false })
   }
 
-  triggerAnalysisForAnnotationBlock = async (annotationBlockId: string, sourceBlockId: string, existingAnnotations: any[]) => {
+  handleAnalysisForAnnotation = async (annotationBlockId: string, sourceBlockId: string, existingAnnotations: Annotation[]) => {
     if (!this.props.note) return
 
     this.setState({ isAnalyzing: true })
@@ -275,39 +341,27 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
       const paragraphBlocks = this.blocks.filter((block: any) => block.type === 'paragraph')
       const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
 
-      // Find the collapsed block by sourceBlockId
       const currentBlock = collapsedBlocks.find(b =>
         b.id === sourceBlockId || b.collapsedIds.includes(sourceBlockId)
       )
 
       if (!currentBlock) {
-        console.log('No collapsed block found for sourceBlockId:', sourceBlockId)
         this.setState({ isAnalyzing: false })
         return
       }
 
-      // Call analyzeBlock with existing annotations to get more
       const annotations = await analyzeBlock(collapsedBlocks, currentBlock, existingAnnotations)
 
       if (annotations.length > 0) {
-        console.log('[NoteEditor.triggerAnalysisForAnnotationBlock] Appending to annotation block:', annotationBlockId)
-        if (this.editor) {
-          const doc: any[] = (this.editor as any).document
-          const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
-          if (annotationBlock) {
-            const existing: Annotation[] = JSON.parse(annotationBlock.props?.annotationsJson || '[]')
-            const all = [...existing, ...annotations]
-            ;(this.editor as any).updateBlock(annotationBlock.id, {
-              props: {
-                ...annotationBlock.props,
-                annotationsJson: JSON.stringify(all),
-              },
-            })
-          }
-        }
+        this.appendToAnnotationBlock(annotationBlockId, annotations)
+      } else {
+        // No annotations found, reset isFetching
+        this.resetAnnotationFetching(annotationBlockId)
       }
     } catch (error) {
       console.error('Error analyzing block:', error)
+      // Reset isFetching on error
+      this.resetAnnotationFetching(annotationBlockId)
     }
 
     this.setState({ isAnalyzing: false })
@@ -327,39 +381,19 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
         return
       }
 
-      // Call analyzeNote to get annotations for all blocks
       const annotationsByBlockId = await analyzeNote(collapsedBlocks)
 
-      // Insert annotation callouts for each block that has annotations
       for (const collapsedBlock of collapsedBlocks) {
         const blockId = collapsedBlock.id
         const annotations = annotationsByBlockId[blockId] || []
 
         if (annotations.length > 0) {
-          // Insert annotation block after the last block in the collapsed group
           const lastBlockIdInCollapsed = collapsedBlock.collapsedIds[collapsedBlock.collapsedIds.length - 1] || collapsedBlock.id
-          if (this.editor) {
-            ;(this.editor as any).insertBlocks(
-              [
-                {
-                  type: 'annotation' as any,
-                  props: {
-                    annotationsJson: JSON.stringify(annotations),
-                    sourceBlockId: blockId,
-                  },
-                } as any,
-              ],
-              lastBlockIdInCollapsed,
-              'after'
-            )
-          }
+          this.insertAnnotation(lastBlockIdInCollapsed, annotations, blockId)
 
-          // Mark the block as analyzed and clean
           this.blockAnalysisStatus.set(blockId, { isDirty: false, isAnalyzed: true })
         }
       }
-
-      // Save via onUpdate from BlockNote will cover persistence
     } catch (error) {
       console.error('Error analyzing note:', error)
     }
@@ -367,10 +401,9 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
     this.setState({ isAnalyzing: false })
   }
 
-
   render() {
     const { note } = this.props
-    const { title, isAnalyzing } = this.state
+    const { title, isAnalyzing, editor } = this.state
 
     if (!note) {
       return (
@@ -400,15 +433,7 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
           </button>
         </div>
         <div className="note-content-container" ref={this.contentContainerRef}>
-          <BlockNoteWrapper
-            initialContent={Array.isArray(note.content) ? note.content : []}
-            pasteHandler={this.handlePaste}
-            onEditorReady={this.handleEditorReady}
-            onFetchMoreAnnotations={(annotationBlockId, sourceBlockId, currentAnnotations) => {
-              // Analyze the source block and append results to this specific annotation block
-              this.triggerAnalysisForAnnotationBlock(annotationBlockId, sourceBlockId, currentAnnotations)
-            }}
-          />
+          {editor && <BlockNoteView editor={editor} />}
         </div>
         {isAnalyzing && (
           <div className="analysis-spinner">
@@ -420,4 +445,5 @@ class NoteEditor extends Component<NoteEditorProps, NoteEditorState> {
   }
 }
 
-export default NoteEditor
+export default Editor
+

@@ -1,21 +1,23 @@
-import React, { useContext } from 'react'
+import React from 'react'
 import { Block } from '@blocknote/core'
 import { createReactBlockSpec } from '@blocknote/react'
 import { Annotation } from './types'
-import { BlockNoteContext } from './BlockNoteWrapper'
 
 interface AnnotationBlockProps {
   block: Block
   onUpdateBlock: (blockId: string, updates: { props: any }) => void
+  onFetchMore?: (
+    annotationBlockId: string,
+    sourceBlockId: string,
+    currentAnnotations: Annotation[]
+  ) => void | Promise<void>
 }
 
-const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock }) => {
+const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock, onFetchMore }) => {
   const sourceBlockId = (block.props as any)?.sourceBlockId || ''
   const annotations: Annotation[] = JSON.parse((block.props as any)?.annotationsJson || '[]')
   const isExpanded = (block.props as any)?.isExpanded || false
   const isFetching = (block.props as any)?.isFetching || false
-
-  const { onFetchMoreAnnotations } = useContext(BlockNoteContext)
 
   const handleDelete = (index: number) => {
     const updatedAnnotations = annotations.filter((_, i) => i !== index)
@@ -37,7 +39,7 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock 
   }
 
   const handleFetchMore = async () => {
-    if (!onFetchMoreAnnotations || !sourceBlockId || isFetching) return
+    if (!onFetchMore || !sourceBlockId || isFetching) return
 
     onUpdateBlock(block.id, {
       props: {
@@ -47,10 +49,10 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock 
     })
 
     try {
-      await onFetchMoreAnnotations(block.id, sourceBlockId, annotations)
+      await onFetchMore(block.id, sourceBlockId, annotations)
     } catch (error) {
       console.error('Error fetching more annotations:', error)
-    } finally {
+      // Reset isFetching on error
       onUpdateBlock(block.id, {
         props: {
           ...block.props,
@@ -58,6 +60,7 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock 
         },
       })
     }
+    // Note: isFetching is set to false in appendToAnnotationBlock on success
   }
 
   if (annotations.length === 0) {
@@ -136,7 +139,25 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock 
   )
 }
 
-// Export the BlockNote schema spec
+// Module-level variable to store the callback
+let _onFetchMoreCallback: ((
+  annotationBlockId: string,
+  sourceBlockId: string,
+  currentAnnotations: Annotation[]
+) => void | Promise<void>) | undefined
+
+// Function to set the callback before creating the editor
+export function setAnnotationCallback(
+  callback: (
+    annotationBlockId: string,
+    sourceBlockId: string,
+    currentAnnotations: Annotation[]
+  ) => void | Promise<void>
+) {
+  _onFetchMoreCallback = callback
+}
+
+// Export the BlockNote schema spec (defined at module level)
 export const annotationBlockSpec = createReactBlockSpec(
   {
     type: 'annotation',
@@ -162,6 +183,7 @@ export const annotationBlockSpec = createReactBlockSpec(
         <AnnotationBlock
           block={props.block as any}
           onUpdateBlock={(blockId, updates) => props.editor.updateBlock(blockId, updates)}
+          onFetchMore={_onFetchMoreCallback}
         />
       )
     },
