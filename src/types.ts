@@ -13,4 +13,22 @@ export interface Note {
   updatedAt: number
 }
 
+export interface BaseBlock {
+  id: string
+  type: string
+  content?: any[]
+  props?: Record<string, any>
+  children?: BaseBlock[]
+}
+
+export interface AnnotationBlock extends BaseBlock {
+  type: 'annotation'
+  props: {
+    annotationsJson: string
+    sourceBlockId: string
+    isExpanded?: boolean
+    isFetching?: boolean
+  }
+}
+
 

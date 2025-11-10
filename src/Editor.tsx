@@ -4,7 +4,7 @@ import { BlockNoteView } from '@blocknote/mantine'
 import { annotationBlockSpec, setAnnotationCallback } from './AnnotationBlock'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
-import { Note, Annotation } from './types'
+import { Note, Annotation, BaseBlock, AnnotationBlock } from './types'
 import { analyzeNote, analyzeBlock } from './analyzer'
 
 interface EditorProps {
@@ -25,7 +25,7 @@ interface BlockAnalysisStatus {
 
 class Editor extends Component<EditorProps, EditorState> {
   private editor: any = null
-  private blocks: any[] = []
+  private blocks: BaseBlock[] = []
   private titleTextareaRef: RefObject<HTMLTextAreaElement | null>
   private contentContainerRef: RefObject<HTMLDivElement | null>
   private blockAnalysisStatus: Map<string, BlockAnalysisStatus> = new Map()
@@ -113,7 +113,7 @@ class Editor extends Component<EditorProps, EditorState> {
     return defaultPasteHandler({ plainTextAsMarkdown: true })
   }
 
-  private isParagraphEmpty = (block: any): boolean => {
+  private isParagraphEmpty = (block: BaseBlock): boolean => {
     if (!block || block.type !== 'paragraph') return false
     const inlines = block.content || []
     const text = inlines.map((n: any) => (n.text || '')).join('')
@@ -137,10 +137,16 @@ class Editor extends Component<EditorProps, EditorState> {
     )
   }
 
+  private findAnnotationBlock = (annotationBlockId: string): AnnotationBlock | null => {
+    if (!this.editor) return null
+    const doc = this.editor.document as BaseBlock[]
+    const block = doc.find((b) => b.id === annotationBlockId)
+    return block && block.type === 'annotation' ? (block as AnnotationBlock) : null
+  }
+
   private appendToAnnotationBlock = (annotationBlockId: string, newAnnotations: Annotation[]) => {
     if (!this.editor || newAnnotations.length === 0) return
-    const doc: any[] = this.editor.document
-    const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
+    const annotationBlock = this.findAnnotationBlock(annotationBlockId)
     if (!annotationBlock) return
     const existing: Annotation[] = JSON.parse(annotationBlock.props?.annotationsJson || '[]')
     const all = [...existing, ...newAnnotations]
@@ -154,16 +160,33 @@ class Editor extends Component<EditorProps, EditorState> {
   }
 
   private resetAnnotationFetching = (annotationBlockId: string) => {
-    if (!this.editor) return
-    const doc: any[] = this.editor.document
-    const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
-    if (annotationBlock) {
+    const annotationBlock = this.findAnnotationBlock(annotationBlockId)
+    if (annotationBlock && this.editor) {
       this.editor.updateBlock(annotationBlock.id, {
         props: {
           ...annotationBlock.props,
           isFetching: false,
         },
       })
+    }
+  }
+
+  private detectDoubleEnter = (editorInstance: any, getChanges: () => any[]) => {
+    const changes = getChanges()
+    for (const ch of changes) {
+      if (ch.type !== 'insert') continue
+      const inserted = ch.block as BaseBlock
+      if (!inserted || inserted.type !== 'paragraph') continue
+      const docArr = editorInstance.document as BaseBlock[]
+      const idx = docArr.findIndex((b) => b.id === inserted.id)
+      if (idx < 2) continue
+      const prev = docArr[idx - 1]
+      const prevPrev = docArr[idx - 2]
+      const isPrevEmpty = this.isParagraphEmpty(prev)
+      const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !this.isParagraphEmpty(prevPrev)
+      if (isPrevEmpty && isPrevPrevNonEmpty) {
+        this.handleAnalysis(prevPrev.id)
+      }
     }
   }
 
@@ -179,22 +202,7 @@ class Editor extends Component<EditorProps, EditorState> {
         this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
       }
       if (getChanges) {
-        const changes = getChanges()
-        for (const ch of changes) {
-          if (ch.type !== 'insert') continue
-          const inserted = ch.block as any
-          if (!inserted || inserted.type !== 'paragraph') continue
-          const docArr = editorInstance.document as any[]
-          const idx = docArr.findIndex((b: any) => b.id === inserted.id)
-          if (idx < 2) continue
-          const prev = docArr[idx - 1]
-          const prevPrev = docArr[idx - 2]
-          const isPrevEmpty = this.isParagraphEmpty(prev)
-          const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !this.isParagraphEmpty(prevPrev)
-          if (isPrevEmpty && isPrevPrevNonEmpty) {
-            this.handleAnalysis(prevPrev.id)
-          }
-        }
+        this.detectDoubleEnter(editorInstance, getChanges)
       }
     })
   }
@@ -234,7 +242,7 @@ class Editor extends Component<EditorProps, EditorState> {
     this.setState({ editor })
   }
 
-  getText = (block: any): string => {
+  getText = (block: BaseBlock): string => {
     if (!block || !Array.isArray(block.content)) {
       return ''
     }
@@ -248,7 +256,7 @@ class Editor extends Component<EditorProps, EditorState> {
       .join('')
   }
 
-  collapseBlocks = (editorBlocks: any[]): Array<{ id: string, text: string, collapsedIds: string[] }> => {
+  collapseBlocks = (editorBlocks: BaseBlock[]): Array<{ id: string, text: string, collapsedIds: string[] }> => {
     const collapsed: Array<{ id: string, text: string, collapsedIds: string[] }> = []
     let currentText = ''
     let currentId = ''
@@ -298,21 +306,29 @@ class Editor extends Component<EditorProps, EditorState> {
     }
   }
 
+  private getCollapsedBlocks = (): Array<{ id: string, text: string, collapsedIds: string[] }> | null => {
+    if (!this.props.note) return null
+    const paragraphBlocks = this.blocks.filter((block): block is BaseBlock => block.type === 'paragraph')
+    return this.collapseBlocks(paragraphBlocks)
+  }
+
   handleAnalysis = async (blockId: string) => {
     if (!this.props.note) return
 
     this.setState({ isAnalyzing: true })
 
     try {
-      const paragraphBlocks = this.blocks.filter((block: any) => block.type === 'paragraph')
-      const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
+      const collapsedBlocks = this.getCollapsedBlocks()
+      if (!collapsedBlocks) {
+        this.setState({ isAnalyzing: false })
+        return
+      }
 
       const currentBlock = collapsedBlocks.find(b =>
         b.id === blockId || b.collapsedIds.includes(blockId)
       )
 
       if (!currentBlock) {
-        console.log('No collapsed block found for blockId:', blockId)
         this.setState({ isAnalyzing: false })
         return
       }
@@ -321,7 +337,6 @@ class Editor extends Component<EditorProps, EditorState> {
 
       if (annotations.length > 0) {
         const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
-        console.log('[Editor.triggerAnalysis] Inserting annotation block after:', lastBlockIdInCollapsed, 'with sourceBlockId:', currentBlock.id)
         this.insertAnnotation(lastBlockIdInCollapsed, annotations, currentBlock.id)
         this.blockAnalysisStatus.set(currentBlock.id, { isDirty: false, isAnalyzed: true })
       }
@@ -338,8 +353,11 @@ class Editor extends Component<EditorProps, EditorState> {
     this.setState({ isAnalyzing: true })
 
     try {
-      const paragraphBlocks = this.blocks.filter((block: any) => block.type === 'paragraph')
-      const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
+      const collapsedBlocks = this.getCollapsedBlocks()
+      if (!collapsedBlocks) {
+        this.setState({ isAnalyzing: false })
+        return
+      }
 
       const currentBlock = collapsedBlocks.find(b =>
         b.id === sourceBlockId || b.collapsedIds.includes(sourceBlockId)
@@ -355,12 +373,10 @@ class Editor extends Component<EditorProps, EditorState> {
       if (annotations.length > 0) {
         this.appendToAnnotationBlock(annotationBlockId, annotations)
       } else {
-        // No annotations found, reset isFetching
         this.resetAnnotationFetching(annotationBlockId)
       }
     } catch (error) {
       console.error('Error analyzing block:', error)
-      // Reset isFetching on error
       this.resetAnnotationFetching(annotationBlockId)
     }
 
@@ -373,10 +389,8 @@ class Editor extends Component<EditorProps, EditorState> {
     this.setState({ isAnalyzing: true })
 
     try {
-      const paragraphBlocks = this.blocks.filter((block: any) => block.type === 'paragraph')
-      const collapsedBlocks = this.collapseBlocks(paragraphBlocks)
-
-      if (collapsedBlocks.length === 0) {
+      const collapsedBlocks = this.getCollapsedBlocks()
+      if (!collapsedBlocks || collapsedBlocks.length === 0) {
         this.setState({ isAnalyzing: false })
         return
       }
