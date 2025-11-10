@@ -2,10 +2,11 @@ import React, { Component, RefObject } from 'react'
 import { BlockNoteEditor, BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core'
 import { BlockNoteView } from '@blocknote/mantine'
 import { annotationBlockSpec, setAnnotationCallback } from './AnnotationBlock'
+import { listBlockSpec, setListCallback } from './ListBlock'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { Note, Annotation, BaseBlock, AnnotationBlock } from './types'
-import { analyzeNote, analyzeBlock } from './analyzer'
+import { analyzeNote, analyzeBlock, analyzeListItems } from './analyzer'
 
 interface EditorProps {
   note: Note | null
@@ -171,6 +172,51 @@ class Editor extends Component<EditorProps, EditorState> {
     }
   }
 
+  private detectListCompletion = (editorInstance: any, getChanges: () => any[]) => {
+    const changes = getChanges()
+    for (const ch of changes) {
+      // Handle update case: when an empty list item becomes a paragraph
+      if (ch.type === 'update' && ch.block) {
+        const updatedBlock = ch.block as BaseBlock
+        // Check if the updated block is now a paragraph
+        if (updatedBlock.type === 'paragraph') {
+          const docArr = editorInstance.document as BaseBlock[]
+          const idx = docArr.findIndex((b) => b.id === updatedBlock.id)
+          if (idx < 1) continue
+
+          const prev = docArr[idx - 1]
+
+          // Check if previous block is a list item
+          if (prev && (prev.type === 'bulletListItem' || prev.type === 'numberedListItem')) {
+            console.log('detectListCompletion')
+            this.handleListCompletion(prev.id)
+          }
+        }
+      }
+
+      // Handle insert case: when a new non-list block is inserted after a list
+      if (ch.type === 'insert') {
+        const inserted = ch.block as BaseBlock
+        if (!inserted) continue
+
+        // Only trigger on non-list blocks
+        if (inserted.type === 'bulletListItem' || inserted.type === 'numberedListItem') continue
+
+        const docArr = editorInstance.document as BaseBlock[]
+        const idx = docArr.findIndex((b) => b.id === inserted.id)
+        if (idx < 1) continue
+
+        const prev = docArr[idx - 1]
+
+        // Check if previous block is a list item
+        if (prev && (prev.type === 'bulletListItem' || prev.type === 'numberedListItem')) {
+          console.log('detectListCompletion')
+          this.handleListCompletion(prev.id)
+        }
+      }
+    }
+  }
+
   private detectDoubleEnter = (editorInstance: any, getChanges: () => any[]) => {
     const changes = getChanges()
     for (const ch of changes) {
@@ -203,6 +249,7 @@ class Editor extends Component<EditorProps, EditorState> {
       }
       if (getChanges) {
         this.detectDoubleEnter(editorInstance, getChanges)
+        this.detectListCompletion(editorInstance, getChanges)
       }
     })
   }
@@ -218,14 +265,17 @@ class Editor extends Component<EditorProps, EditorState> {
 
     // Set the callback before creating the schema
     setAnnotationCallback(this.handleAnalysisForAnnotation)
+    setListCallback(this.handleListGeneration)
 
     // createReactBlockSpec returns a function, so we need to call it to get the spec object
     const annotationSpec = (annotationBlockSpec as any)()
+    const listSpec = (listBlockSpec as any)()
 
     const schema = BlockNoteSchema.create({
       blockSpecs: {
         ...defaultBlockSpecs,
         annotation: annotationSpec,
+        listBlock: listSpec,
       },
     })
 
@@ -258,6 +308,14 @@ class Editor extends Component<EditorProps, EditorState> {
         return ''
       })
       .join('')
+  }
+
+  private convertDocToMarkdown = async (doc: BaseBlock[]): Promise<string> => {
+    if (!this.editor) return ''
+    const filteredBlocks = doc.filter((block) =>
+      block.type !== 'annotation' && block.type !== 'listBlock'
+    )
+    return await this.editor.blocksToMarkdownLossy(filteredBlocks)
   }
 
   collapseBlocks = (editorBlocks: BaseBlock[]): Array<{ id: string, text: string, collapsedIds: string[] }> => {
@@ -337,7 +395,12 @@ class Editor extends Component<EditorProps, EditorState> {
         return
       }
 
-      const annotations = await analyzeBlock(collapsedBlocks, currentBlock, [])
+      // Convert blocks to markdown
+      const doc = this.editor?.document as BaseBlock[] || []
+      const fullNoteText = await this.convertDocToMarkdown(doc)
+      const currentBlockText = currentBlock.text
+
+      const annotations = await analyzeBlock(fullNoteText, currentBlockText, [])
 
       if (annotations.length > 0) {
         const lastBlockIdInCollapsed = currentBlock.collapsedIds[currentBlock.collapsedIds.length - 1] || currentBlock.id
@@ -372,7 +435,12 @@ class Editor extends Component<EditorProps, EditorState> {
         return
       }
 
-      const annotations = await analyzeBlock(collapsedBlocks, currentBlock, existingAnnotations)
+      // Convert blocks to markdown
+      const doc = this.editor?.document as BaseBlock[] || []
+      const fullNoteText = await this.convertDocToMarkdown(doc)
+      const currentBlockText = currentBlock.text
+
+      const annotations = await analyzeBlock(fullNoteText, currentBlockText, existingAnnotations)
 
       if (annotations.length > 0) {
         this.appendToAnnotationBlock(annotationBlockId, annotations)
@@ -387,6 +455,145 @@ class Editor extends Component<EditorProps, EditorState> {
     this.setState({ isAnalyzing: false })
   }
 
+  handleListCompletion = async (lastListItemId: string) => {
+    if (!this.props.note || !this.editor) return
+
+    this.setState({ isAnalyzing: true })
+
+    try {
+      const doc = this.editor.document as BaseBlock[]
+      const lastListItem = doc.find((b) => b.id === lastListItemId)
+      if (!lastListItem || (lastListItem.type !== 'bulletListItem' && lastListItem.type !== 'numberedListItem')) {
+        this.setState({ isAnalyzing: false })
+        return
+      }
+
+      // Find all list items in the same list (by finding consecutive list items)
+      const lastIdx = doc.findIndex((b) => b.id === lastListItemId)
+      const listItems: BaseBlock[] = []
+
+      // Go backwards to find the start of the list
+      for (let i = lastIdx; i >= 0; i--) {
+        const block = doc[i]
+        if (block.type === lastListItem.type) {
+          listItems.unshift(block)
+        } else {
+          break
+        }
+      }
+
+      if (listItems.length === 0) {
+        this.setState({ isAnalyzing: false })
+        return
+      }
+
+      // Get text from list items
+      const itemsText = listItems.map((item) => this.getText(item)).filter(Boolean)
+      if (itemsText.length === 0) {
+        this.setState({ isAnalyzing: false })
+        return
+      }
+
+      // Convert all blocks to markdown for context
+      const fullNoteText = await this.convertDocToMarkdown(doc)
+
+      // Format list items with dashes
+      const listItemsText = itemsText.map((item) => `- ${item}`).join('\n')
+
+      const newItems = await analyzeListItems(fullNoteText, listItemsText)
+
+      console.log('newItems', newItems)
+
+      if (newItems.length > 0) {
+        this.insertListBlock(lastListItemId, newItems, listItems[0].id)
+      }
+    } catch (error) {
+      console.error('Error analyzing list:', error)
+    }
+
+    this.setState({ isAnalyzing: false })
+  }
+
+  handleListGeneration = async (listBlockId: string, sourceListId: string, currentItems: string[]) => {
+    if (!this.props.note || !this.editor) return
+
+    this.setState({ isAnalyzing: true })
+
+    try {
+      const doc = this.editor.document as BaseBlock[]
+      const sourceList = doc.find((b) => b.id === sourceListId)
+      if (!sourceList) {
+        this.setState({ isAnalyzing: false })
+        return
+      }
+
+      // Convert all blocks to markdown for context
+      const fullNoteText = await this.convertDocToMarkdown(doc)
+
+      // Format list items with dashes
+      const listItemsText = currentItems.map((item) => `- ${item}`).join('\n')
+
+      const newItems = await analyzeListItems(fullNoteText, listItemsText)
+
+      if (newItems.length > 0) {
+        this.appendToListBlock(listBlockId, newItems)
+      } else {
+        this.resetListGenerating(listBlockId)
+      }
+    } catch (error) {
+      console.error('Error generating list items:', error)
+      this.resetListGenerating(listBlockId)
+    }
+
+    this.setState({ isAnalyzing: false })
+  }
+
+  private insertListBlock = (afterBlockId: string, items: string[], sourceListId: string) => {
+    if (!this.editor || items.length === 0) return
+    this.editor.insertBlocks(
+      [
+        {
+          type: 'listBlock' as any,
+          props: {
+            itemsJson: JSON.stringify(items),
+            sourceListId,
+          },
+        } as any,
+      ],
+      afterBlockId,
+      'after'
+    )
+  }
+
+  private appendToListBlock = (listBlockId: string, newItems: string[]) => {
+    if (!this.editor || newItems.length === 0) return
+    const doc = this.editor.document as BaseBlock[]
+    const listBlock = doc.find((b) => b.id === listBlockId && b.type === 'listBlock')
+    if (!listBlock) return
+    const existing: string[] = JSON.parse((listBlock.props as any)?.itemsJson || '[]')
+    const all = [...existing, ...newItems]
+    this.editor.updateBlock(listBlock.id, {
+      props: {
+        ...listBlock.props,
+        itemsJson: JSON.stringify(all),
+        isGenerating: false,
+      },
+    })
+  }
+
+  private resetListGenerating = (listBlockId: string) => {
+    const doc = this.editor?.document as BaseBlock[]
+    const listBlock = doc?.find((b) => b.id === listBlockId && b.type === 'listBlock')
+    if (listBlock && this.editor) {
+      this.editor.updateBlock(listBlock.id, {
+        props: {
+          ...listBlock.props,
+          isGenerating: false,
+        },
+      })
+    }
+  }
+
   handleAnalyzeAll = async () => {
     if (!this.props.note) return
 
@@ -399,7 +606,17 @@ class Editor extends Component<EditorProps, EditorState> {
         return
       }
 
-      const annotationsByBlockId = await analyzeNote(collapsedBlocks)
+      // Convert blocks to markdown
+      const doc = this.editor?.document as BaseBlock[] || []
+      const fullNoteText = await this.convertDocToMarkdown(doc)
+
+      // Create block texts with IDs for analyzeNote
+      const blockTexts = collapsedBlocks.map((block) => ({
+        id: block.id,
+        text: block.text,
+      }))
+
+      const annotationsByBlockId = await analyzeNote(fullNoteText, blockTexts)
 
       for (const collapsedBlock of collapsedBlocks) {
         const blockId = collapsedBlock.id

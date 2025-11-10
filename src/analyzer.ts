@@ -236,17 +236,19 @@ function tryExtractCompleteBlock(
   return null
 }
 
-export async function analyzeNote(blocks: Array<{ id: string; text: string }>): Promise<Record<string, Annotation[]>> {
-  const blocksText = blocks
+export async function analyzeNote(noteText: string, blockTexts: Array<{ id: string; text: string }>): Promise<Record<string, Annotation[]>> {
+  // Format blocks with IDs for streaming response (still need IDs for response parsing)
+  const blocksText = blockTexts
     .map(block => {
       const textWithBreaks = block.text.replace(/\\n/g, '\n')
       return `block_id: ${block.id}\n${textWithBreaks}`
     })
     .join('\n\n')
 
-  const userPrompt = `${USER_PROMPT_PREAMBLE}\n\n${blocksText}`
+  // Use full note text in preamble, then blocks with IDs
+  const userPrompt = `${USER_PROMPT_PREAMBLE}\n\n${noteText}\n\n---\n\nBlocks to analyze:\n\n${blocksText}`
 
-  const blockIds = blocks.map(b => b.id)
+  const blockIds = blockTexts.map(b => b.id)
   const completedBlocks = new Set<string>()
   const parsedBlocks: Record<string, Annotation[]> = {}
 
@@ -273,8 +275,8 @@ export async function analyzeNote(blocks: Array<{ id: string; text: string }>): 
 }
 
 export async function analyzeBlock(
-  allBlocks: Array<{ id: string; text: string }>,
-  currentBlock: { id: string; text: string },
+  fullNoteText: string,
+  currentBlockText: string,
   existingAnnotations: Annotation[] = []
 ): Promise<Annotation[]> {
   let existingSourcesNote = ''
@@ -288,24 +290,15 @@ export async function analyzeBlock(
     }
   }
 
-  // Format all blocks as context
-  const allBlocksText = allBlocks
-    .map(block => {
-      const textWithBreaks = block.text.replace(/\\n/g, '\n')
-      return textWithBreaks
-    })
-    .join('\n\n')
-
   const userPrompt = `
 Here are some notes (very rough) about an essay I'm writing.
 Research the ideas and provide places to extend/elaborate on them from a diversity of perspectives.
 
-${allBlocksText}
+${fullNoteText}
 
-Focus specifically on this block:
+Focus specifically on this section:
 
-block_id: ${currentBlock.id}
-${currentBlock.text.replace(/\\n/g, '\n')}
+${currentBlockText}
 
 Form your response as JSON {annotations: [annotation,...]} where annotations is a NON-EMPTY array (1-3 in length) of {description, relevance, source, domain}:
 - \`description\` is a short summary of the source (1-4 sentences)
@@ -336,6 +329,44 @@ You MUST provide at least one annotation.${existingSourcesNote}
   }
 
   // Fallback to empty array
+  return []
+}
+
+export async function analyzeListItems(
+  fullNoteText: string,
+  listItemsText: string
+): Promise<string[]> {
+  const userPrompt = `
+Here are some notes (very rough) about an essay I'm writing.
+
+${fullNoteText}
+
+Focus specifically on this list:
+
+${listItemsText}
+
+Generate 3-5 more items that match the style, theme, and tone of the existing list items. The new items should fit naturally with the essay's overall direction and the examples already provided.
+
+Form your response as JSON {items: [item1, item2, ...]} where items is a NON-EMPTY array of strings, each string being a new list item that matches the style and theme of the existing items.
+`.trim()
+
+  const parsed = await callAPI(userPrompt, undefined, false)
+
+  // Ensure we always return an array
+  if (!parsed.items) {
+    return []
+  }
+
+  // If it's already an array, return it
+  if (Array.isArray(parsed.items)) {
+    return parsed.items as string[]
+  }
+
+  // If it's an object, try to convert it to an array
+  if (typeof parsed.items === 'object') {
+    return Object.values(parsed.items) as string[]
+  }
+
   return []
 }
 

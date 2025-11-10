@@ -368,6 +368,77 @@ body {
   cursor: not-allowed;
 }
 
+/* List Block (BlockNote) */
+.list-block {
+  width: 100%;
+  margin: 8px 0;
+  border: 1px solid var(--dark-gray);
+  border-radius: 4px;
+  background-color: var(--black);
+}
+
+.list-block-header {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  user-select: none;
+}
+
+.list-block-header-text {
+  color: var(--light-gray);
+  font-size: 12px;
+}
+
+.list-block-content {
+  padding: 12px;
+  border-top: 1px solid var(--dark-gray);
+}
+
+.list-block-items {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px 0;
+}
+
+.list-block-item {
+  padding: 8px 0;
+  color: var(--white);
+  font-size: 13px;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--dark-gray);
+}
+
+.list-block-item:last-child {
+  border-bottom: none;
+}
+
+.list-block-generate-more {
+  width: 100%;
+  padding: 12px;
+  background-color: var(--black);
+  border: 1px solid var(--dark-gray);
+  border-radius: 4px;
+  color: var(--white);
+  font-size: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s;
+}
+
+.list-block-generate-more:hover:not(:disabled) {
+  background-color: var(--dark-gray);
+}
+
+.list-block-generate-more:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Analysis Spinner */
 .analysis-spinner {
   position: fixed;
