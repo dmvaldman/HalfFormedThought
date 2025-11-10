@@ -2,6 +2,7 @@
 :root {
   /* Base Colors */
   --white: #e0e0e0;
+  --white-pure: #ffffff;
   --black: #1a1a1a;
   --light-gray: #aaa;
   --medium-gray: #666;
@@ -28,7 +29,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--black);
-  color: #ffffff;
+  color: var(--white-pure);
   height: 100vh;
   overflow: hidden;
 }
@@ -56,7 +57,7 @@ body {
 /* Sidebar */
 .sidebar {
   width: 250px;
-  background-color: #252525;
+  background-color: var(--black);
   border-right: 1px solid var(--dark-gray);
   display: flex;
   flex-direction: column;
@@ -71,10 +72,10 @@ body {
 .new-note-button {
   width: 100%;
   padding: 12px;
-  background-color: #2a2a2a;
+  background-color: var(--black);
   border: 1px solid var(--dark-gray);
   border-radius: 6px;
-  color: #ffffff;
+  color: var(--white-pure);
   font-size: 24px;
   font-weight: 300;
   cursor: pointer;
@@ -83,6 +84,7 @@ body {
 
 .new-note-button:hover {
   background-color: var(--dark-gray);
+  border-color: var(--medium-gray);
 }
 
 .notes-list {
@@ -101,10 +103,12 @@ body {
   justify-content: space-between;
   align-items: center;
   position: relative;
+  border: 1px solid transparent;
 }
 
 .note-item:hover {
-  background-color: #2a2a2a;
+  background-color: var(--dark-gray);
+  border: 1px solid var(--medium-gray);
 }
 
 .note-item.active {
@@ -142,8 +146,8 @@ body {
 }
 
 .note-item .delete-button:hover {
-  background-color: #444;
-  color: #ffffff;
+  background-color: var(--bg-hover);
+  color: var(--white-pure);
 }
 
 /* Note Editor */
@@ -178,7 +182,7 @@ body {
   flex: 1;
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: var(--white-pure);
   font-size: 32px;
   font-weight: 600;
   font-family: inherit;
@@ -194,9 +198,9 @@ body {
 }
 
 .analyze-button {
-  background: #2a2a2a;
+  background: var(--black);
   border: 1px solid var(--dark-gray);
-  color: #ffffff;
+  color: var(--white-pure);
   padding: 8px 16px;
   border-radius: 6px;
   font-size: 14px;
@@ -210,7 +214,7 @@ body {
 }
 
 .analyze-button:hover:not(:disabled) {
-  background: #3a3a3a;
+  background: var(--dark-gray);
   border-color: var(--medium-gray);
 }
 
@@ -251,7 +255,7 @@ body {
   margin: 8px 0;
   border: 1px solid var(--dark-gray);
   border-radius: 4px;
-  background-color: #1e1e1e;
+  background-color: var(--black);
 }
 
 .annotation-block-header {
@@ -287,7 +291,7 @@ body {
   min-width: 200px;
   max-width: 350px;
   padding: 12px;
-  background-color: #252525;
+  background-color: var(--black);
   border-radius: 4px;
   border: 1px solid var(--dark-gray);
 }
@@ -307,7 +311,7 @@ body {
   width: 20px;
   height: 20px;
   cursor: pointer;
-  color: #ffffff;
+  color: var(--white-pure);
   font-size: 12px;
   line-height: 1;
   padding: 0;
@@ -343,7 +347,7 @@ body {
 .annotation-block-fetch-more {
   min-width: 50px;
   padding: 12px;
-  background-color: #252525;
+  background-color: var(--black);
   border: 1px solid var(--dark-gray);
   border-radius: 4px;
   color: var(--white);
@@ -371,7 +375,7 @@ body {
   right: 24px;
   width: 40px;
   height: 40px;
-  background-color: #252525;
+  background-color: var(--black);
   border: 1px solid var(--dark-gray);
   border-radius: 50%;
   display: flex;
