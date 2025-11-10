@@ -87,7 +87,7 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock,
               <div key={index} className="annotation-block-card">
                 {/* Delete button */}
                 <button
-                  className="annotation-block-delete-btn"
+                  className="delete-btn"
                   onClick={(e) => {
                     e.stopPropagation()
                     handleDelete(index)

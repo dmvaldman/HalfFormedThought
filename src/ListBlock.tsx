@@ -50,6 +50,16 @@ const ListBlock: React.FC<ListBlockProps> = ({ block, onUpdateBlock, onGenerateM
     }
   }
 
+  const handleDelete = (index: number) => {
+    const updatedItems = items.filter((_, i) => i !== index)
+    onUpdateBlock(block.id, {
+      props: {
+        ...block.props,
+        itemsJson: JSON.stringify(updatedItems),
+      },
+    })
+  }
+
   if (items.length === 0) {
     return null
   }
@@ -72,6 +82,16 @@ const ListBlock: React.FC<ListBlockProps> = ({ block, onUpdateBlock, onGenerateM
           <ul className="list-block-items">
             {items.map((item, index) => (
               <li key={index} className="list-block-item">
+                <button
+                  className="delete-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleDelete(index)
+                  }}
+                  title="Delete item"
+                >
+                  ×
+                </button>
                 {item}
               </li>
             ))}

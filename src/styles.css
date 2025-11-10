@@ -296,11 +296,8 @@ body {
   border: 1px solid var(--dark-gray);
 }
 
-.annotation-block-card:hover .annotation-block-delete-btn {
-  display: block;
-}
-
-.annotation-block-delete-btn {
+/* Shared delete button styles */
+.delete-btn {
   display: none;
   position: absolute;
   top: 4px;
@@ -312,9 +309,18 @@ body {
   height: 20px;
   cursor: pointer;
   color: var(--white-pure);
-  font-size: 12px;
+  font-size: 16px;
   line-height: 1;
   padding: 0;
+}
+
+.delete-btn:hover {
+  background: var(--dark-gray);
+}
+
+.annotation-block-card:hover .delete-btn,
+.list-block-item:hover .delete-btn {
+  display: block;
 }
 
 .annotation-block-source {
@@ -404,15 +410,44 @@ body {
 }
 
 .list-block-item {
-  padding: 8px 0;
+  position: relative;
+  padding: 8px 0 8px 20px !important;
   color: var(--white);
   font-size: 13px;
   line-height: 1.5;
-  border-bottom: 1px solid var(--dark-gray);
+  list-style: none;
 }
 
-.list-block-item:last-child {
-  border-bottom: none;
+.list-block-item::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--light-gray);
+}
+
+.list-block-item:hover .list-block-delete-btn {
+  display: block;
+}
+
+.list-block-delete-btn {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--black);
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  color: var(--white-pure);
+  font-size: 12px;
+  line-height: 1;
+  padding: 0;
+}
+
+.list-block-delete-btn:hover {
+  background: var(--dark-gray);
 }
 
 .list-block-generate-more {

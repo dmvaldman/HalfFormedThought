@@ -38,6 +38,8 @@ const ANNOTATIONS_SCHEMA = {
   properties: {
     annotations: {
       type: 'array',
+      minItems: 1,
+      maxItems: 3,
       items: {
         type: 'object',
         properties: {
@@ -69,6 +71,8 @@ const LIST_ITEMS_SCHEMA = {
   properties: {
     items: {
       type: 'array',
+      minItems: 1,
+      maxItems: 5,
       items: {
         type: 'string'
       }
@@ -108,18 +112,21 @@ const openrouter = new OpenAI({
   }
 })
 
-async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations') {
+async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = false, schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
   if (API_PROVIDER === 'kimi') {
     return callKimiAPI(userPrompt, onStreamChunk, stream)
   } else if (API_PROVIDER === 'openrouter') {
-    return callOpenRouterAPI(userPrompt, onStreamChunk, stream, schemaType)
+    return callOpenRouterAPI(userPrompt, onStreamChunk, stream, schemaType, useStructuredOutput)
   } else {
-    return callTogetherAPI(userPrompt, onStreamChunk, stream)
+    return callTogetherAPI(userPrompt, onStreamChunk, stream, schemaType)
   }
 }
 
-async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true) {
+async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations') {
   console.log('userPrompt\n\n', userPrompt)
+
+  // Select the appropriate schema based on schemaType
+  const schema = schemaType === 'annotations' ? ANNOTATIONS_SCHEMA : LIST_ITEMS_SCHEMA
 
   if (stream) {
     const streamResponse = await together.chat.completions.create({
@@ -129,7 +136,7 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
         { role: 'user', content: userPrompt }
       ],
       temperature: temperature,
-      response_format: { type: 'json_schema', schema: ANNOTATIONS_SCHEMA },
+      response_format: { type: 'json_schema', schema },
       reasoning_effort: "high",
       stream: true
     })
@@ -157,7 +164,7 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
         { role: 'user', content: userPrompt }
       ],
       temperature: temperature,
-      response_format: { type: 'json_schema', schema: ANNOTATIONS_SCHEMA },
+      response_format: { type: 'json_schema', schema },
       reasoning_effort: "high",
       stream: false
     })
@@ -212,13 +219,15 @@ async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) 
   }
 }
 
-async function callOpenRouterAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations') {
+async function callOpenRouterAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
   console.log('userPrompt\n\n', userPrompt)
 
   // Select the appropriate schema based on schemaType
-  const responseFormat = schemaType === 'annotations'
-    ? OPENROUTER_ANNOTATIONS_SCHEMA
-    : OPENROUTER_LIST_ITEMS_SCHEMA
+  const responseFormat = useStructuredOutput
+    ? (schemaType === 'annotations'
+      ? OPENROUTER_ANNOTATIONS_SCHEMA
+      : OPENROUTER_LIST_ITEMS_SCHEMA)
+    : { type: 'json_object' }
 
   // OpenRouter-specific body options
   const requestOptions: any = {
@@ -362,7 +371,7 @@ export async function analyzeNote(noteText: string, blockTexts: Array<{ id: stri
       completedBlocks.add(completedBlock.blockId)
       parsedBlocks[completedBlock.blockId] = completedBlock.parsed[completedBlock.blockId] || []
     }
-  })
+  }, true)
 
   // Return parsed blocks from streaming, or fallback to full parsed response
   if (Object.keys(parsedBlocks).length > 0) {
