@@ -446,8 +446,14 @@ You MUST provide at least one annotation.${existingSourcesNote}
 
 export async function analyzeListItems(
   fullNoteText: string,
-  listItemsText: string
+  originalListText: string,
+  generatedItemsText: string = ''
 ): Promise<string[]> {
+  let existingItemsNote = ''
+  if (generatedItemsText && generatedItemsText.trim().length > 0) {
+    existingItemsNote = `\n\nNote: The following items have already been generated for this list:\n${generatedItemsText}\n\nPlease provide new items that are different from these.`
+  }
+
   const userPrompt = `
 Here are some notes (very rough) about an essay I'm writing.
 
@@ -455,11 +461,11 @@ ${fullNoteText}
 
 Focus specifically on this list:
 
-${listItemsText}
+${originalListText}
 
 Generate 3-5 more items that match the style, theme, and tone of the existing list items. The new items should fit naturally with the essay's overall direction and the examples already provided.
 
-Form your response as JSON {items: [item1, item2, ...]} where items is a NON-EMPTY array of strings, each string being a new list item that matches the style and theme of the existing items.
+Form your response as JSON {items: [item1, item2, ...]} where items is a NON-EMPTY array of strings, each string being a new list item that matches the style and theme of the existing items.${existingItemsNote}
 `.trim()
 
   const parsed = await callAPI(userPrompt, undefined, false, 'list_items')

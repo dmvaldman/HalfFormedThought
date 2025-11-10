@@ -310,6 +310,38 @@ class Editor extends Component<EditorProps, EditorState> {
       .join('')
   }
 
+  private findListItems = (doc: BaseBlock[], listItemId: string): BaseBlock[] => {
+    const listItem = doc.find((b) => b.id === listItemId)
+    if (!listItem || (listItem.type !== 'bulletListItem' && listItem.type !== 'numberedListItem')) {
+      return []
+    }
+
+    const listItems: BaseBlock[] = []
+    const itemIdx = doc.findIndex((b) => b.id === listItemId)
+
+    // Go backwards to find the start of the list
+    for (let i = itemIdx; i >= 0; i--) {
+      const block = doc[i]
+      if (block.type === listItem.type) {
+        listItems.unshift(block)
+      } else {
+        break
+      }
+    }
+
+    // Go forwards to find the end of the list
+    for (let i = itemIdx + 1; i < doc.length; i++) {
+      const block = doc[i]
+      if (block.type === listItem.type) {
+        listItems.push(block)
+      } else {
+        break
+      }
+    }
+
+    return listItems
+  }
+
   private convertDocToMarkdown = async (doc: BaseBlock[]): Promise<string> => {
     if (!this.editor) return ''
     const filteredBlocks = doc.filter((block) =>
@@ -468,20 +500,7 @@ class Editor extends Component<EditorProps, EditorState> {
         return
       }
 
-      // Find all list items in the same list (by finding consecutive list items)
-      const lastIdx = doc.findIndex((b) => b.id === lastListItemId)
-      const listItems: BaseBlock[] = []
-
-      // Go backwards to find the start of the list
-      for (let i = lastIdx; i >= 0; i--) {
-        const block = doc[i]
-        if (block.type === lastListItem.type) {
-          listItems.unshift(block)
-        } else {
-          break
-        }
-      }
-
+      const listItems = this.findListItems(doc, lastListItemId)
       if (listItems.length === 0) {
         this.setState({ isAnalyzing: false })
         return
@@ -498,9 +517,9 @@ class Editor extends Component<EditorProps, EditorState> {
       const fullNoteText = await this.convertDocToMarkdown(doc)
 
       // Format list items with dashes
-      const listItemsText = itemsText.map((item) => `- ${item}`).join('\n')
+      const originalListText = itemsText.map((item) => `- ${item}`).join('\n')
 
-      const newItems = await analyzeListItems(fullNoteText, listItemsText)
+      const newItems = await analyzeListItems(fullNoteText, originalListText)
 
       console.log('newItems', newItems)
 
@@ -521,19 +540,23 @@ class Editor extends Component<EditorProps, EditorState> {
 
     try {
       const doc = this.editor.document as BaseBlock[]
-      const sourceList = doc.find((b) => b.id === sourceListId)
-      if (!sourceList) {
+      const originalListItems = this.findListItems(doc, sourceListId)
+      if (originalListItems.length === 0) {
         this.setState({ isAnalyzing: false })
         return
       }
 
+      // Get text from original list items
+      const originalItemsText = originalListItems.map((item) => this.getText(item)).filter(Boolean)
+
       // Convert all blocks to markdown for context
       const fullNoteText = await this.convertDocToMarkdown(doc)
 
-      // Format list items with dashes
-      const listItemsText = currentItems.map((item) => `- ${item}`).join('\n')
+      // Format both original list and generated items with dashes
+      const originalListText = originalItemsText.map((item) => `- ${item}`).join('\n')
+      const generatedItemsText = currentItems.map((item) => `- ${item}`).join('\n')
 
-      const newItems = await analyzeListItems(fullNoteText, listItemsText)
+      const newItems = await analyzeListItems(fullNoteText, originalListText, generatedItemsText)
 
       if (newItems.length > 0) {
         this.appendToListBlock(listBlockId, newItems)
