@@ -154,7 +154,6 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
       return
     }
 
-    // Use BlockNote's insertBlocks API to insert annotation block
     // Store annotations as JSON string since BlockNote props only support primitives
     this.editor.insertBlocks(
       [
@@ -162,7 +161,7 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
           type: 'annotation' as any,
           props: {
             annotationsJson: JSON.stringify(annotations),
-            sourceBlockId: sourceBlockId, // Store the collapsed block ID for fetching more
+            sourceBlockId: sourceBlockId,
           },
         } as any,
       ],
@@ -177,7 +176,6 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
       return
     }
 
-    // Get the annotation block by its ID (not by searching sourceBlockId)
     const doc: any[] = (this.editor as any).document
     const annotationBlock = doc.find((b: any) => b.id === annotationBlockId)
 
@@ -186,18 +184,13 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
       return
     }
 
-    console.log('[BlockNoteWrapper.appendAnnotation] Appending to annotation block:', annotationBlockId)
+    const existing: Annotation[] = JSON.parse(annotationBlock.props?.annotationsJson || '[]')
+    const all = [...existing, ...newAnnotations]
 
-    // Get existing annotations and append new ones
-    const existingAnnotationsJson = annotationBlock.props?.annotationsJson || '[]'
-    const existingAnnotations: Annotation[] = JSON.parse(existingAnnotationsJson)
-    const allAnnotations = [...existingAnnotations, ...newAnnotations]
-
-    // Update the annotation block
     this.editor.updateBlock(annotationBlock.id, {
       props: {
         ...annotationBlock.props,
-        annotationsJson: JSON.stringify(allAnnotations),
+        annotationsJson: JSON.stringify(all),
       },
     })
   }
@@ -208,7 +201,6 @@ class BlockNoteWrapper extends React.Component<BlockNoteWrapperProps> implements
       return
     }
 
-    // Find the annotation block and update its annotations
     const doc: any[] = (this.editor as any).document
     const annotationBlock = doc.find((b: any) => b.id === annotationBlockId && b.type === 'annotation')
 

@@ -1,4 +1,4 @@
-import React, { useState, useContext } from 'react'
+import React, { useContext } from 'react'
 import { Block } from '@blocknote/core'
 import { createReactBlockSpec } from '@blocknote/react'
 import { Annotation } from './types'
@@ -6,22 +6,20 @@ import { BlockNoteContext } from './BlockNoteWrapper'
 
 interface AnnotationBlockProps {
   block: Block
-  editor: any
+  onUpdateBlock: (blockId: string, updates: { props: any }) => void
 }
 
-const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, editor }) => {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [isFetching, setIsFetching] = useState(false)
-  const annotationsJson = (block.props as any)?.annotationsJson || '[]'
+const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock }) => {
   const sourceBlockId = (block.props as any)?.sourceBlockId || ''
-  const annotations: Annotation[] = JSON.parse(annotationsJson)
+  const annotations: Annotation[] = JSON.parse((block.props as any)?.annotationsJson || '[]')
+  const isExpanded = (block.props as any)?.isExpanded || false
+  const isFetching = (block.props as any)?.isFetching || false
 
-  // Get callback from context instead of editor
   const { onFetchMoreAnnotations } = useContext(BlockNoteContext)
 
   const handleDelete = (index: number) => {
     const updatedAnnotations = annotations.filter((_, i) => i !== index)
-    editor.updateBlock(block.id, {
+    onUpdateBlock(block.id, {
       props: {
         ...block.props,
         annotationsJson: JSON.stringify(updatedAnnotations),
@@ -30,20 +28,36 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, editor }) => {
   }
 
   const toggleExpand = () => {
-    setIsExpanded(!isExpanded)
+    onUpdateBlock(block.id, {
+      props: {
+        ...block.props,
+        isExpanded: !isExpanded,
+      },
+    })
   }
 
   const handleFetchMore = async () => {
     if (!onFetchMoreAnnotations || !sourceBlockId || isFetching) return
 
-    setIsFetching(true)
+    onUpdateBlock(block.id, {
+      props: {
+        ...block.props,
+        isFetching: true,
+      },
+    })
+
     try {
-      // Pass annotation block's own ID, sourceBlockId for analysis, and current annotations
       await onFetchMoreAnnotations(block.id, sourceBlockId, annotations)
     } catch (error) {
       console.error('Error fetching more annotations:', error)
+    } finally {
+      onUpdateBlock(block.id, {
+        props: {
+          ...block.props,
+          isFetching: false,
+        },
+      })
     }
-    setIsFetching(false)
   }
 
   if (annotations.length === 0) {
@@ -133,12 +147,23 @@ export const annotationBlockSpec = createReactBlockSpec(
       sourceBlockId: {
         default: '',
       },
+      isExpanded: {
+        default: false,
+      },
+      isFetching: {
+        default: false,
+      },
     },
     content: 'none',
   },
   {
     render: (props) => {
-      return <AnnotationBlock block={props.block as any} editor={props.editor} />
+      return (
+        <AnnotationBlock
+          block={props.block as any}
+          onUpdateBlock={(blockId, updates) => props.editor.updateBlock(blockId, updates)}
+        />
+      )
     },
   }
 )
