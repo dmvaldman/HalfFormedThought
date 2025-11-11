@@ -3,19 +3,7 @@ import { Note } from './types'
 const STORAGE_KEY = 'half-formed-thought-notes'
 
 function migrateNote(note: any): Note {
-  // Migration stub - add future migrations here
-  return normalizeNote(note)
-}
-
-function normalizeNote(note: any): Note {
-  // Ensure content is an array (BlockNote document format)
-  if (!Array.isArray(note.content)) {
-    return {
-      ...note,
-      content: [],
-    }
-  }
-  return note as Note
+  return note
 }
 
 export function loadNotes(): Note[] {
@@ -26,9 +14,8 @@ export function loadNotes(): Note[] {
   try {
     const notes = JSON.parse(stored)
     const migratedNotes = notes.map(migrateNote)
-    // Save migrated notes back to storage
     saveNotes(migratedNotes)
-    return migratedNotes.map(normalizeNote)
+    return migratedNotes
   } catch {
     return []
   }
