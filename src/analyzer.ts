@@ -394,7 +394,7 @@ export async function analyzeBlock(
   let existingSourcesNote = ''
   if (existingAnnotations && existingAnnotations.length > 0) {
     const titles = existingAnnotations
-      .map(ann => ann.title || (ann as any).source)
+      .map(ann => ann.title)
       .filter(Boolean)
       .join(', ')
     if (titles) {

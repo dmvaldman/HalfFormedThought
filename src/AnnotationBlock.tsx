@@ -98,9 +98,9 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock,
                 </button>
 
                 {/* Annotation content */}
-                {(annotation.title || (annotation as any).source) && (
+                {annotation.title && (
                   <div className="annotation-block-source">
-                    {annotation.title || (annotation as any).source}
+                    {annotation.title}
                     {annotation.author && `, ${annotation.author}`}
                   </div>
                 )}
