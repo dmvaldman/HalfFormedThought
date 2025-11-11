@@ -11,10 +11,10 @@ const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
 Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
 Form your response as JSON with replies to each section of the essay {block_id: annotations}.
-where annotations is an array (0-3 in length) of {description, relevance, source, domain} (all fields are optional):
+where annotations is an array (0-3 in length) of {description, title, author, domain} (all fields are optional except description, title, domain):
 - \`description\` is a short summary of the source (0-4 sentences)
-- \`relevance\` is why this source is relevant to the text block (0-4 sentences)
-- \`source\` is the name of the source (person name, book title, essay title, etc).
+- \`title\` is the name of the source (book title, essay title, etc).
+- \`author\` is the name of the author (person name, optional)
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
 `.trim()
 
@@ -44,11 +44,11 @@ const ANNOTATIONS_SCHEMA = {
         type: 'object',
         properties: {
           description: { type: 'string' },
-          relevance: { type: 'string' },
-          source: { type: 'string' },
+          title: { type: 'string' },
+          author: { type: 'string' },
           domain: { type: 'string' }
         },
-        required: ['description', 'relevance', 'source', 'domain']
+        required: ['description', 'title', 'domain']
       }
     }
   },
@@ -393,12 +393,12 @@ export async function analyzeBlock(
 ): Promise<Annotation[]> {
   let existingSourcesNote = ''
   if (existingAnnotations && existingAnnotations.length > 0) {
-    const sources = existingAnnotations
-      .map(ann => ann.source)
+    const titles = existingAnnotations
+      .map(ann => ann.title || (ann as any).source)
       .filter(Boolean)
       .join(', ')
-    if (sources) {
-      existingSourcesNote = `\n\nNote: The following sources have already been provided for this block: ${sources}. Please provide annotations from different sources.`
+    if (titles) {
+      existingSourcesNote = `\n\nNote: The following sources have already been provided for this block: ${titles}. Please provide annotations from different sources.`
     }
   }
 
@@ -412,10 +412,10 @@ Focus specifically on this section:
 
 ${currentBlockText}
 
-Form your response as JSON {annotations: [annotation,...]} where annotations is a NON-EMPTY array (1-3 in length) of {description, relevance, source, domain}:
+Form your response as JSON {annotations: [annotation,...]} where annotations is a NON-EMPTY array (1-3 in length) of {description, title, author, domain}:
 - \`description\` is a short summary of the source (1-4 sentences)
-- \`relevance\` is why this source is relevant to the text block (1-4 sentences)
-- \`source\` is the name of the source (person name, book title, essay title, etc).
+- \`title\` is the name of the source (book title, essay title, etc).
+- \`author\` is the name of the author (person name, optional)
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
 
 You MUST provide at least one annotation.${existingSourcesNote}

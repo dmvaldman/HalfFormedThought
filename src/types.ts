@@ -1,7 +1,7 @@
 export interface Annotation {
   description?: string
-  relevance?: string
-  source?: string
+  title?: string
+  author?: string
   domain?: string
 }
 
