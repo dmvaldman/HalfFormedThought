@@ -578,9 +578,6 @@ class Editor extends Component<EditorProps, EditorState> {
       [
         {
           type: 'toggle' as any,
-          props: {
-            isAnnotation: true,
-          },
           content: 'More examples',
           children: items.map((text) => ({
             type: 'bulletListItem' as any,

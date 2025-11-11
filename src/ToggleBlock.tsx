@@ -4,11 +4,7 @@ import { createReactBlockSpec, ToggleWrapper } from '@blocknote/react'
 export const toggleBlockSpec = createReactBlockSpec(
   {
     type: 'toggle',
-    propSchema: {
-      isAnnotation: {
-        default: false,
-      },
-    },
+    propSchema: {},
     content: 'inline',
   },
   {
