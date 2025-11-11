@@ -258,6 +258,20 @@ body {
   background-color: var(--black);
 }
 
+/* Disable drag on annotation block content to allow text selection */
+.annotation-block-content {
+  -webkit-user-drag: none;
+  pointer-events: auto;
+}
+
+.annotation-block-content * {
+  -webkit-user-drag: none;
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
 .annotation-block-header {
   padding: 8px 12px;
   cursor: pointer;
@@ -294,6 +308,13 @@ body {
   background-color: var(--black);
   border-radius: 4px;
   border: 1px solid var(--dark-gray);
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+  cursor: text;
+  /* Prevent drag on the card content */
+  -webkit-user-drag: none;
 }
 
 /* Shared delete button styles */
