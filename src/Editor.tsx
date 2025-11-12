@@ -47,11 +47,21 @@ class Editor extends Component<EditorProps, EditorState> {
     if (prevProps.note?.id !== this.props.note?.id) {
       this.blockAnalysisStatus.clear()
       this.blocks = Array.isArray(this.props.note?.content) ? this.props.note.content : []
+
+      // Temporarily set editor to null to force BlockNoteView to unmount before creating new one
       this.setState({
+        editor: null,
         title: this.props.note?.title || '',
         isAnalyzing: false,
       })
-      this.initializeNote(this.props.note)
+
+      // Initialize the new editor after a short delay to ensure unmounting is complete
+
+      console.log('componentDidUpdate')
+      setTimeout(() => {
+        console.log('componentDidUpdate timeout')
+        this.initializeNote(this.props.note)
+      }, 0)
     }
 
     if (this.titleTextareaRef.current) {
@@ -64,14 +74,15 @@ class Editor extends Component<EditorProps, EditorState> {
     if (this.props.note) {
       this.blocks = Array.isArray(this.props.note.content) ? this.props.note.content : []
     }
+    console.log('componentDidMount initializeNote')
     this.initializeNote(this.props.note)
   }
 
   componentWillUnmount(): void {
-    this.destroy(false)
+    this.destroy()
   }
 
-  private destroy(updateState: boolean = true) {
+  private destroy() {
     if (this.unsubscribeChange) {
       this.unsubscribeChange()
       this.unsubscribeChange = null
@@ -80,9 +91,6 @@ class Editor extends Component<EditorProps, EditorState> {
       this.editor.destroy()
     }
     this.editor = null
-    if (updateState) {
-      this.setState({ editor: null })
-    }
   }
 
   handlePaste = ({ event, editor, defaultPasteHandler }: { event: ClipboardEvent; editor: any; defaultPasteHandler: (opts?: any) => any }): boolean => {
@@ -245,6 +253,8 @@ class Editor extends Component<EditorProps, EditorState> {
       return
     }
 
+    // Destroy without updating state to avoid unmounting BlockNoteView prematurely
+    // The key prop on BlockNoteView will force it to remount with the new editor
     this.destroy()
 
     // Set the callback before creating the schema
