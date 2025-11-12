@@ -53,15 +53,10 @@ class Editor extends Component<EditorProps, EditorState> {
         editor: null,
         title: this.props.note?.title || '',
         isAnalyzing: false,
-      })
-
-      // Initialize the new editor after a short delay to ensure unmounting is complete
-
-      console.log('componentDidUpdate')
-      setTimeout(() => {
-        console.log('componentDidUpdate timeout')
+      }, () => {
+        // Initialize the new editor after state update is complete
         this.initializeNote(this.props.note)
-      }, 0)
+      })
     }
 
     if (this.titleTextareaRef.current) {
@@ -74,7 +69,6 @@ class Editor extends Component<EditorProps, EditorState> {
     if (this.props.note) {
       this.blocks = Array.isArray(this.props.note.content) ? this.props.note.content : []
     }
-    console.log('componentDidMount initializeNote')
     this.initializeNote(this.props.note)
   }
 
