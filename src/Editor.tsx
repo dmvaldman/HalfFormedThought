@@ -114,7 +114,7 @@ class Editor extends Component<EditorProps, EditorState> {
     return defaultPasteHandler({ plainTextAsMarkdown: true })
   }
 
-  private isParagraphEmpty = (block: BaseBlock): boolean => {
+  private isEmpty = (block: BaseBlock): boolean => {
     if (!block || block.type !== 'paragraph') return false
     const inlines = block.content || []
     const text = inlines.map((n: any) => (n.text || '')).join('')
@@ -126,12 +126,12 @@ class Editor extends Component<EditorProps, EditorState> {
     this.editor.insertBlocks(
       [
         {
-          type: 'annotation' as any,
+          type: 'annotation',
           props: {
             annotationsJson: JSON.stringify(annotations),
             sourceBlockId,
           },
-        } as any,
+        },
       ],
       afterBlockId,
       'after'
@@ -198,28 +198,6 @@ class Editor extends Component<EditorProps, EditorState> {
           }
         }
       }
-
-      // Handle insert case: when a new non-list block is inserted after a list
-      if (ch.type === 'insert') {
-        const inserted = ch.block as BaseBlock
-        if (!inserted) continue
-
-        // Only trigger on non-list blocks
-        if (inserted.type === 'bulletListItem' || inserted.type === 'numberedListItem') continue
-        // Ignore our generated container block to avoid loops
-        if (inserted.type === 'toggle') continue
-
-        const docArr = editorInstance.document as BaseBlock[]
-        const idx = docArr.findIndex((b) => b.id === inserted.id)
-        if (idx < 1) continue
-
-        const prev = docArr[idx - 1]
-
-        // Check if previous block is a list item
-        if (prev && (prev.type === 'bulletListItem' || prev.type === 'numberedListItem')) {
-          this.handleListCompletion(prev.id)
-        }
-      }
     }
   }
 
@@ -234,8 +212,8 @@ class Editor extends Component<EditorProps, EditorState> {
       if (idx < 2) continue
       const prev = docArr[idx - 1]
       const prevPrev = docArr[idx - 2]
-      const isPrevEmpty = this.isParagraphEmpty(prev)
-      const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !this.isParagraphEmpty(prevPrev)
+      const isPrevEmpty = this.isEmpty(prev)
+      const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !this.isEmpty(prevPrev)
       if (isPrevEmpty && isPrevPrevNonEmpty) {
         this.handleAnalysis(prevPrev.id)
       }
@@ -273,8 +251,8 @@ class Editor extends Component<EditorProps, EditorState> {
     setAnnotationCallback(this.handleAnalysisForAnnotation)
 
     // createReactBlockSpec returns a function, so we need to call it to get the spec object
-    const annotationSpec = (annotationBlockSpec as any)()
-    const toggleSpec = (toggleBlockSpec as any)()
+    const annotationSpec = annotationBlockSpec()
+    const toggleSpec = toggleBlockSpec()
 
     const schema = BlockNoteSchema.create({
       blockSpecs: {
@@ -316,10 +294,10 @@ class Editor extends Component<EditorProps, EditorState> {
   }
 
 
-  private findListItems = (doc: BaseBlock[], listItemId: string): BaseBlock[] => {
+  private getListText = (doc: BaseBlock[], listItemId: string): string => {
     const listItem = doc.find((b) => b.id === listItemId)
     if (!listItem || (listItem.type !== 'bulletListItem' && listItem.type !== 'numberedListItem')) {
-      return []
+      return ''
     }
 
     const listItems: BaseBlock[] = []
@@ -345,7 +323,7 @@ class Editor extends Component<EditorProps, EditorState> {
       }
     }
 
-    return listItems
+    return listItems.map((item) => this.getText(item)).filter(Boolean).join('\n')
   }
 
   private convertDocToMarkdown = async (doc: BaseBlock[]): Promise<string> => {
@@ -500,21 +478,8 @@ class Editor extends Component<EditorProps, EditorState> {
 
     try {
       const doc = this.editor.document as BaseBlock[]
-      const lastListItem = doc.find((b) => b.id === lastListItemId)
-      if (!lastListItem || (lastListItem.type !== 'bulletListItem' && lastListItem.type !== 'numberedListItem')) {
-        this.setState({ isAnalyzing: false })
-        return
-      }
-
-      const listItems = this.findListItems(doc, lastListItemId)
-      if (listItems.length === 0) {
-        this.setState({ isAnalyzing: false })
-        return
-      }
-
-      // Get text from list items
-      const itemsText = listItems.map((item) => this.getText(item)).filter(Boolean)
-      if (itemsText.length === 0) {
+      const listText = this.getListText(doc, lastListItemId)
+      if (!listText) {
         this.setState({ isAnalyzing: false })
         return
       }
@@ -522,10 +487,7 @@ class Editor extends Component<EditorProps, EditorState> {
       // Convert all blocks to markdown for context
       const fullNoteText = await this.convertDocToMarkdown(doc)
 
-      // Format list items with dashes
-      const originalListText = itemsText.map((item) => `- ${item}`).join('\n')
-
-      const newItems = await analyzeListItems(fullNoteText, originalListText)
+      const newItems = await analyzeListItems(fullNoteText, listText)
 
       if (newItems.length > 0) {
         this.insertListBlock(lastListItemId, newItems)
@@ -537,73 +499,39 @@ class Editor extends Component<EditorProps, EditorState> {
     this.setState({ isAnalyzing: false })
   }
 
-  handleListGeneration = async (listBlockId: string, sourceListId: string, currentItems: string[]) => {
-    if (!this.props.note || !this.editor) return
-
-    this.setState({ isAnalyzing: true })
-
-    try {
-      const doc = this.editor.document as BaseBlock[]
-      const originalListItems = this.findListItems(doc, sourceListId)
-      if (originalListItems.length === 0) {
-        this.setState({ isAnalyzing: false })
-        return
-      }
-
-      // Get text from original list items
-      const originalItemsText = originalListItems.map((item) => this.getText(item)).filter(Boolean)
-
-      // Convert all blocks to markdown for context
-      const fullNoteText = await this.convertDocToMarkdown(doc)
-
-      // Format both original list and generated items with dashes
-      const originalListText = originalItemsText.map((item) => `- ${item}`).join('\n')
-      const generatedItemsText = currentItems.map((item) => `- ${item}`).join('\n')
-
-      const newItems = await analyzeListItems(fullNoteText, originalListText, generatedItemsText)
-
-      if (newItems.length > 0) {
-        this.appendToListBlock(listBlockId, newItems)
-      }
-    } catch (error) {
-      console.error('Error generating list items:', error)
-    }
-
-    this.setState({ isAnalyzing: false })
-  }
-
   private insertListBlock = (afterBlockId: string, items: string[]) => {
     if (!this.editor || items.length === 0) return
     this.editor.insertBlocks(
       [
         {
-          type: 'toggle' as any,
+          type: 'toggle',
           content: 'More examples',
           children: items.map((text) => ({
-            type: 'bulletListItem' as any,
+            type: 'bulletListItem',
             content: text,
           })),
-        } as any,
+        },
       ],
       afterBlockId,
       'after'
     )
   }
 
-  private appendToListBlock = (listBlockId: string, newItems: string[]) => {
-    if (!this.editor || newItems.length === 0) return
-    const doc = this.editor.document as BaseBlock[]
-    const toggleBlock = doc.find((b) => b.id === listBlockId && b.type === 'toggle')
-    if (!toggleBlock) return
-    const existingChildren = Array.isArray((toggleBlock as any).children) ? (toggleBlock as any).children : []
-    const appendedChildren = newItems.map((text) => ({
-      type: 'bulletListItem' as any,
-      content: text,
-    }))
-    this.editor.updateBlock(toggleBlock.id, {
-      children: [...existingChildren, ...appendedChildren],
-    })
-  }
+  // TODO: we will add this back in when we add the ability to generate list items
+  // private appendToListBlock = (listBlockId: string, newItems: string[]) => {
+  //   if (!this.editor || newItems.length === 0) return
+  //   const doc = this.editor.document as BaseBlock[]
+  //   const toggleBlock = doc.find((b) => b.id === listBlockId && b.type === 'toggle')
+  //   if (!toggleBlock) return
+  //   const existingChildren = Array.isArray(toggleBlock.children) ? toggleBlock.children : []
+  //   const appendedChildren = newItems.map((text) => ({
+  //     type: 'bulletListItem',
+  //     content: text,
+  //   }))
+  //   this.editor.updateBlock(toggleBlock.id, {
+  //     children: [...existingChildren, ...appendedChildren],
+  //   })
+  // }
 
 
   handleAnalyzeAll = async () => {
