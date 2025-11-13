@@ -583,85 +583,33 @@ class Editor extends Component<EditorProps, EditorState> {
 
     try {
       const doc = this.editor.document as BaseBlock[]
-      console.log('handleMoreButtonClick called with ID:', moreButtonBlockId)
 
       // Find the toggle block that contains the moreButton as a child
-      let toggleBlock: BaseBlock | null = null
-      for (const block of doc) {
-        if (block.type === 'toggle' && Array.isArray(block.children)) {
-          // Check both by ID and by type (in case ID matching fails)
-          const hasMoreButton = block.children.some(
-            (child) => {
-              const matches = child.id === moreButtonBlockId || child.type === 'moreButton'
-              if (matches) {
-                console.log('Found moreButton in toggle block:', block.id, 'child:', child)
-              }
-              return matches
-            }
-          )
-          if (hasMoreButton) {
-            toggleBlock = block
-            console.log('Found toggle block:', toggleBlock.id)
-            break
-          }
-        }
-      }
+      const toggleBlock = doc.find(
+        (block) =>
+          block.type === 'toggle' &&
+          Array.isArray(block.children) &&
+          block.children.some((child) => child.id === moreButtonBlockId || child.type === 'moreButton')
+      )
 
       if (!toggleBlock || toggleBlock.type !== 'toggle') {
-        // If no toggle block found, try to find an annotation block instead
-        // This handles the case where more button is used for fetching more annotations
-        const moreButtonIndex = doc.findIndex((b) => b.id === moreButtonBlockId)
-        if (moreButtonIndex !== -1) {
-          let annotationBlock: AnnotationBlock | null = null
-          for (let i = moreButtonIndex - 1; i >= 0; i--) {
-            const block = doc[i]
-            if (block.type === 'annotation') {
-              annotationBlock = block as AnnotationBlock
-              break
-            }
-          }
-
-          if (annotationBlock) {
-            const sourceBlockId = annotationBlock.props?.sourceBlockId
-            if (sourceBlockId) {
-              const existingAnnotations: Annotation[] = JSON.parse(
-                annotationBlock.props?.annotationsJson || '[]'
-              )
-              await this.handleAnalysisForAnnotation(
-                annotationBlock.id,
-                sourceBlockId,
-                existingAnnotations
-              )
-            }
-          }
-        }
         this.setState({ isAnalyzing: false })
         return
       }
 
       // Get the list text from the toggle block's children
       const listText = this.getToggleBlockListText(toggleBlock)
-      console.log('List text extracted:', listText)
       if (!listText) {
-        console.log('No list text found, returning')
         this.setState({ isAnalyzing: false })
         return
       }
 
-      // Convert all blocks to markdown for context
-      const fullNoteText = await this.convertDocToMarkdown(doc)
-
       // Analyze for more list items
-      console.log('Analyzing for more list items...')
+      const fullNoteText = await this.convertDocToMarkdown(doc)
       const newItems = await analyzeListItems(fullNoteText, listText)
-      console.log('Got new items:', newItems)
 
       if (newItems.length > 0) {
-        // Append new items to the toggle block
-        console.log('Appending items to toggle block:', toggleBlock.id)
         this.appendToListBlock(toggleBlock.id, newItems)
-      } else {
-        console.log('No new items to append')
       }
     } catch (error) {
       console.error('Error handling more button click:', error)

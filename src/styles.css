@@ -34,6 +34,13 @@ body {
   overflow: hidden;
 }
 
+button {
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
 #root {
   height: 100vh;
 }
@@ -397,7 +404,7 @@ body {
 
 /* More Button Block */
 .more-button-block {
-  margin: 8px 0;
+  margin: 0;
 }
 
 .more-button {
