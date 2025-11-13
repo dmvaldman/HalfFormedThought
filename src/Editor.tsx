@@ -26,6 +26,9 @@ interface BlockAnalysisStatus {
 
 class Editor extends Component<EditorProps, EditorState> {
   private editor: any = null
+  private expectedDocLen: number = 0
+  private initAtMs: number = 0
+  private isStabilizing: boolean = false
   private blocks: BaseBlock[] = []
   private titleTextareaRef: RefObject<HTMLTextAreaElement | null>
   private contentContainerRef: RefObject<HTMLDivElement | null>
@@ -230,6 +233,26 @@ class Editor extends Component<EditorProps, EditorState> {
     this.unsubscribeChange = editor.onChange((editorInstance: any, { getChanges }: { getChanges?: () => any[] }) => {
       const doc = editorInstance.document
       this.blocks = doc
+      const now = (typeof performance !== 'undefined' && (performance as any).now) ? (performance as any).now() : Date.now()
+      const deltaMs = Math.round(now - (this.initAtMs || 0))
+      // Detect the transient shrink that happens immediately after init on hot reload
+      const docLen = Array.isArray(doc) ? doc.length : 0
+      if (
+        this.isStabilizing &&
+        this.expectedDocLen > 0 &&
+        docLen > 0 &&
+        docLen < this.expectedDocLen &&
+        deltaMs >= 0 &&
+        deltaMs <= 300
+      ) {
+        // Attempt to restore expected content by reinitializing the editor
+        if (this.props.note) {
+          this.setState({ editor: null }, () => {
+            setTimeout(() => this.initializeNote(this.props.note), 0)
+          })
+        }
+        return
+      }
       if (this.props.note) {
         this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
       }
@@ -241,6 +264,9 @@ class Editor extends Component<EditorProps, EditorState> {
   }
 
   private initializeNote(note: Note | null) {
+    // Track expected doc length and init timestamp for post-init change correlation
+    this.expectedDocLen = Array.isArray(note?.content) ? (note as Note).content.length : 0
+    this.initAtMs = (typeof performance !== 'undefined' && (performance as any).now) ? (performance as any).now() : Date.now()
     if (!note) {
       this.destroy()
       this.blocks = []
@@ -280,6 +306,11 @@ class Editor extends Component<EditorProps, EditorState> {
     this.editor = editor
     this.blocks = Array.isArray(note.content) ? note.content : []
     this.attachListeners(editor)
+    // Enter stabilization window to ignore transient editor mutations
+    this.isStabilizing = true
+    setTimeout(() => {
+      this.isStabilizing = false
+    }, 300)
     this.setState({ editor })
   }
 
