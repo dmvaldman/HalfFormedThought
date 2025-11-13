@@ -88,33 +88,22 @@ class Editor extends Component<EditorProps, EditorState> {
     this.editor = null
   }
 
-  handlePaste = ({ event, editor, defaultPasteHandler }: { event: ClipboardEvent; editor: any; defaultPasteHandler: (opts?: any) => any }): boolean => {
+  handlePaste = ({ event, editor: _editor, defaultPasteHandler }: { event: ClipboardEvent; editor: any; defaultPasteHandler: (opts?: any) => any }): boolean => {
+    const htmlData = event.clipboardData?.getData('text/html')
     const plainText = event.clipboardData?.getData('text/plain')
-    if (plainText) {
-      const lines = plainText.split('\n')
-      const blocksToInsert = lines.map(line => ({
-        type: 'paragraph' as const,
-        content: line ? [{ type: 'text' as const, text: line }] : [],
-      }))
 
-      const selection = editor.getSelection()
-      const currentBlock = selection?.blocks[0] || editor.getTextCursorPosition()?.block
-
-      if (currentBlock && blocksToInsert.length > 0) {
-        editor.insertBlocks(blocksToInsert, currentBlock, 'after')
-        if (currentBlock.type === 'paragraph') {
-          const currentContent = currentBlock.content
-          if (Array.isArray(currentContent)) {
-            const currentText = currentContent.map((n: any) => n.text || '').join('')
-            if (currentText.trim() === '') {
-              editor.removeBlocks([currentBlock])
-            }
-          }
-        }
-        return true
-      }
+    // If there's HTML content, let BlockNote handle it (it can parse markdown from HTML)
+    if (htmlData) {
+      return defaultPasteHandler({ prioritizeMarkdownOverHTML: true })
     }
-    return defaultPasteHandler({ plainTextAsMarkdown: true })
+
+    // If there's plain text, let BlockNote parse it as markdown
+    if (plainText) {
+      return defaultPasteHandler({ plainTextAsMarkdown: true })
+    }
+
+    // Fallback to default behavior
+    return defaultPasteHandler()
   }
 
   private isEmpty = (block: BaseBlock): boolean => {
