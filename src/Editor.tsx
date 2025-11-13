@@ -3,6 +3,7 @@ import { BlockNoteEditor, BlockNoteSchema, defaultBlockSpecs } from '@blocknote/
 import { BlockNoteView } from '@blocknote/mantine'
 import { annotationBlockSpec, setAnnotationCallback } from './AnnotationBlock'
 import { toggleBlockSpec } from './ToggleBlock'
+import { moreButtonBlockSpec, setMoreButtonCallback } from './MoreButtonBlock'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { Note, Annotation, BaseBlock, AnnotationBlock } from './types'
@@ -251,18 +252,21 @@ class Editor extends Component<EditorProps, EditorState> {
     // The key prop on BlockNoteView will force it to remount with the new editor
     this.destroy()
 
-    // Set the callback before creating the schema
+    // Set the callbacks before creating the schema
     setAnnotationCallback(this.handleAnalysisForAnnotation)
+    setMoreButtonCallback(this.handleMoreButtonClick)
 
     // createReactBlockSpec returns a function, so we need to call it to get the spec object
     const annotationSpec = annotationBlockSpec()
     const toggleSpec = toggleBlockSpec()
+    const moreButtonSpec = moreButtonBlockSpec()
 
     const schema = BlockNoteSchema.create({
       blockSpecs: {
         ...defaultBlockSpecs,
         annotation: annotationSpec,
         toggle: toggleSpec,
+        moreButton: moreButtonSpec,
       },
     })
 
@@ -328,6 +332,26 @@ class Editor extends Component<EditorProps, EditorState> {
     }
 
     return listItems.map((item) => this.getText(item)).filter(Boolean).join('\n')
+  }
+
+  private getToggleBlockListText = (toggleBlock: BaseBlock): string => {
+    if (!toggleBlock || toggleBlock.type !== 'toggle') {
+      return ''
+    }
+
+    const children = Array.isArray(toggleBlock.children) ? toggleBlock.children : []
+    // Filter out moreButton blocks - they're not actual list items
+    return children
+      .filter((child) => child.type !== 'moreButton')
+      .map((child) => {
+        // Handle both string content and array content formats
+        if (typeof child.content === 'string') {
+          return child.content
+        }
+        return this.getText(child)
+      })
+      .filter(Boolean)
+      .join('\n')
   }
 
   private convertDocToMarkdown = async (doc: BaseBlock[]): Promise<string> => {
@@ -505,15 +529,22 @@ class Editor extends Component<EditorProps, EditorState> {
 
   private insertListBlock = (afterBlockId: string, items: string[]) => {
     if (!this.editor || items.length === 0) return
+
+    // Insert the toggle block with list items, ending with a more button as the last child
     this.editor.insertBlocks(
       [
         {
           type: 'toggle',
           content: 'More examples',
-          children: items.map((text) => ({
-            type: 'bulletListItem',
-            content: text,
-          })),
+          children: [
+            ...items.map((text) => ({
+              type: 'bulletListItem',
+              content: text,
+            })),
+            {
+              type: 'moreButton',
+            },
+          ],
         },
       ],
       afterBlockId,
@@ -521,21 +552,123 @@ class Editor extends Component<EditorProps, EditorState> {
     )
   }
 
-  // TODO: we will add this back in when we add the ability to generate list items
-  // private appendToListBlock = (listBlockId: string, newItems: string[]) => {
-  //   if (!this.editor || newItems.length === 0) return
-  //   const doc = this.editor.document as BaseBlock[]
-  //   const toggleBlock = doc.find((b) => b.id === listBlockId && b.type === 'toggle')
-  //   if (!toggleBlock) return
-  //   const existingChildren = Array.isArray(toggleBlock.children) ? toggleBlock.children : []
-  //   const appendedChildren = newItems.map((text) => ({
-  //     type: 'bulletListItem',
-  //     content: text,
-  //   }))
-  //   this.editor.updateBlock(toggleBlock.id, {
-  //     children: [...existingChildren, ...appendedChildren],
-  //   })
-  // }
+  private appendToListBlock = (listBlockId: string, newItems: string[]) => {
+    if (!this.editor || newItems.length === 0) return
+    const doc = this.editor.document as BaseBlock[]
+    const toggleBlock = doc.find((b) => b.id === listBlockId && b.type === 'toggle')
+    if (!toggleBlock) return
+    const existingChildren = Array.isArray(toggleBlock.children) ? toggleBlock.children : []
+    const appendedChildren = newItems.map((text) => ({
+      type: 'bulletListItem',
+      content: text,
+    }))
+
+    // Check if the last child is a moreButton - if so, insert before it to keep it last
+    const lastChild = existingChildren[existingChildren.length - 1]
+    const hasMoreButton = lastChild && lastChild.type === 'moreButton'
+
+    const updatedChildren = hasMoreButton
+      ? [...existingChildren.slice(0, -1), ...appendedChildren, lastChild]
+      : [...existingChildren, ...appendedChildren]
+
+    this.editor.updateBlock(toggleBlock.id, {
+      children: updatedChildren,
+    })
+  }
+
+  handleMoreButtonClick = async (moreButtonBlockId: string) => {
+    if (!this.props.note || !this.editor) return
+
+    this.setState({ isAnalyzing: true })
+
+    try {
+      const doc = this.editor.document as BaseBlock[]
+      console.log('handleMoreButtonClick called with ID:', moreButtonBlockId)
+
+      // Find the toggle block that contains the moreButton as a child
+      let toggleBlock: BaseBlock | null = null
+      for (const block of doc) {
+        if (block.type === 'toggle' && Array.isArray(block.children)) {
+          // Check both by ID and by type (in case ID matching fails)
+          const hasMoreButton = block.children.some(
+            (child) => {
+              const matches = child.id === moreButtonBlockId || child.type === 'moreButton'
+              if (matches) {
+                console.log('Found moreButton in toggle block:', block.id, 'child:', child)
+              }
+              return matches
+            }
+          )
+          if (hasMoreButton) {
+            toggleBlock = block
+            console.log('Found toggle block:', toggleBlock.id)
+            break
+          }
+        }
+      }
+
+      if (!toggleBlock || toggleBlock.type !== 'toggle') {
+        // If no toggle block found, try to find an annotation block instead
+        // This handles the case where more button is used for fetching more annotations
+        const moreButtonIndex = doc.findIndex((b) => b.id === moreButtonBlockId)
+        if (moreButtonIndex !== -1) {
+          let annotationBlock: AnnotationBlock | null = null
+          for (let i = moreButtonIndex - 1; i >= 0; i--) {
+            const block = doc[i]
+            if (block.type === 'annotation') {
+              annotationBlock = block as AnnotationBlock
+              break
+            }
+          }
+
+          if (annotationBlock) {
+            const sourceBlockId = annotationBlock.props?.sourceBlockId
+            if (sourceBlockId) {
+              const existingAnnotations: Annotation[] = JSON.parse(
+                annotationBlock.props?.annotationsJson || '[]'
+              )
+              await this.handleAnalysisForAnnotation(
+                annotationBlock.id,
+                sourceBlockId,
+                existingAnnotations
+              )
+            }
+          }
+        }
+        this.setState({ isAnalyzing: false })
+        return
+      }
+
+      // Get the list text from the toggle block's children
+      const listText = this.getToggleBlockListText(toggleBlock)
+      console.log('List text extracted:', listText)
+      if (!listText) {
+        console.log('No list text found, returning')
+        this.setState({ isAnalyzing: false })
+        return
+      }
+
+      // Convert all blocks to markdown for context
+      const fullNoteText = await this.convertDocToMarkdown(doc)
+
+      // Analyze for more list items
+      console.log('Analyzing for more list items...')
+      const newItems = await analyzeListItems(fullNoteText, listText)
+      console.log('Got new items:', newItems)
+
+      if (newItems.length > 0) {
+        // Append new items to the toggle block
+        console.log('Appending items to toggle block:', toggleBlock.id)
+        this.appendToListBlock(toggleBlock.id, newItems)
+      } else {
+        console.log('No new items to append')
+      }
+    } catch (error) {
+      console.error('Error handling more button click:', error)
+    }
+
+    this.setState({ isAnalyzing: false })
+  }
 
 
   handleAnalyzeAll = async () => {

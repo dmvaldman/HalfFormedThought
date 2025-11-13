@@ -395,6 +395,30 @@ body {
   cursor: not-allowed;
 }
 
+/* More Button Block */
+.more-button-block {
+  margin: 8px 0;
+}
+
+.more-button {
+  padding: 8px 16px;
+  background-color: var(--black);
+  border: 1px solid var(--dark-gray);
+  border-radius: 4px;
+  color: var(--white);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.more-button:hover {
+  background-color: var(--dark-gray);
+}
+
+.more-button:active {
+  background-color: var(--medium-gray);
+}
+
 /* List Block (BlockNote) */
 .list-block {
   width: 100%;
