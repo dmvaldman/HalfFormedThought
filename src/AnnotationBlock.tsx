@@ -135,23 +135,7 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock,
   )
 }
 
-// Module-level variable to store the callback
-let _onFetchMoreCallback: ((
-  annotationBlockId: string,
-  sourceBlockId: string,
-  currentAnnotations: Annotation[]
-) => void | Promise<void>) | undefined
-
-// Function to set the callback before creating the editor
-export function setAnnotationCallback(
-  callback: (
-    annotationBlockId: string,
-    sourceBlockId: string,
-    currentAnnotations: Annotation[]
-  ) => void | Promise<void>
-) {
-  _onFetchMoreCallback = callback
-}
+// No longer needed - methods are accessed via editor instance
 
 // Export the BlockNote schema spec (defined at module level)
 export const annotationBlockSpec = createReactBlockSpec(
@@ -175,11 +159,13 @@ export const annotationBlockSpec = createReactBlockSpec(
   },
   {
     render: (props) => {
+      // Access editor methods directly from the editor instance
+      const handleAnalysisForAnnotationMore = (props.editor as any).handleAnalysisForAnnotationMore
       return (
         <AnnotationBlock
           block={props.block as any}
           onUpdateBlock={(blockId, updates) => props.editor.updateBlock(blockId, updates)}
-          onFetchMore={_onFetchMoreCallback}
+          onFetchMore={handleAnalysisForAnnotationMore}
         />
       )
     },

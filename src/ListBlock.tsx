@@ -105,62 +105,6 @@ export const listBlockUtils = {
     })
   },
 
-  /**
-   * Creates a toggle block structure with list items and a moreButton
-   */
-  createListToggleBlock(items: string[], toggleBlockId?: string) {
-    return {
-      type: 'toggle',
-      props: {
-        textContent: 'More examples',
-      },
-      children: [
-        ...items.map((text) => ({
-          type: 'bulletListItem',
-          content: text,
-        })),
-        {
-          type: 'moreButton',
-          props: toggleBlockId ? { toggleBlockId } : {},
-        },
-      ],
-    } as any
-  },
-
-  /**
-   * Inserts a toggle block with list items and updates the moreButton with toggleBlockId
-   */
-  insertListToggleBlock(editor: BlockNoteEditor, afterBlockId: string, items: string[]): void {
-    if (!editor || items.length === 0) return
-
-    // Insert the toggle block with list items, ending with a more button as the last child
-    const toggleBlock = listBlockUtils.createListToggleBlock(items)
-    editor.insertBlocks([toggleBlock as any], afterBlockId, 'after')
-
-    // Update the moreButton with the toggleBlockId after insertion
-    const doc = editor.document as BaseBlock[]
-    const afterBlockIndex = doc.findIndex((b) => b.id === afterBlockId)
-    if (afterBlockIndex !== -1 && afterBlockIndex + 1 < doc.length) {
-      const insertedToggleBlock = doc[afterBlockIndex + 1]
-      if (insertedToggleBlock && insertedToggleBlock.type === 'toggle') {
-        const existingChildren = Array.isArray(insertedToggleBlock.children) ? insertedToggleBlock.children : []
-        const lastChild = existingChildren[existingChildren.length - 1]
-        if (lastChild && lastChild.type === 'moreButton') {
-          editor.updateBlock(insertedToggleBlock.id, {
-            children: [
-              ...existingChildren.slice(0, -1),
-              {
-                ...lastChild,
-                props: {
-                  toggleBlockId: insertedToggleBlock.id,
-                },
-              },
-            ] as any,
-          })
-        }
-      }
-    }
-  },
 
   /**
    * Detects when an empty list item becomes a paragraph (list completion)
@@ -252,7 +196,8 @@ export const listBlockUtils = {
   async handleCompletion(
     editor: BlockNoteEditor,
     lastListItemId: string,
-    fullNoteText: string
+    fullNoteText: string,
+    handleInsertList: (afterBlockId: string, items: string[]) => string | null
   ): Promise<void> {
     if (!editor) return
 
@@ -293,7 +238,8 @@ export const listBlockUtils = {
     const newItems = await analyzeListItems(fullNoteText, listText)
 
     if (newItems.length > 0) {
-      listBlockUtils.insertListToggleBlock(editor, lastListItemId, newItems)
+      // Insert toggle block and list items
+      handleInsertList(lastListItemId, newItems)
     }
   },
 }

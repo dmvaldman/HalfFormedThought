@@ -29,16 +29,6 @@ const MoreButtonBlock: React.FC<MoreButtonBlockProps> = ({ block, onMoreClick })
   )
 }
 
-// Module-level variable to store the callback
-let _onMoreClickCallback: ((blockId: string) => void | Promise<void>) | undefined
-
-// Function to set the callback before creating the editor
-export function setMoreButtonCallback(
-  callback: (blockId: string) => void | Promise<void>
-) {
-  _onMoreClickCallback = callback
-}
-
 // Export the BlockNote schema spec
 export const moreButtonBlockSpec = createReactBlockSpec(
   {
@@ -48,10 +38,12 @@ export const moreButtonBlockSpec = createReactBlockSpec(
   },
   {
     render: (props) => {
+      // Access editor methods directly from the editor instance
+      const handleAnalysisForListMore = (props.editor as any).handleAnalysisForListMore
       return (
         <MoreButtonBlock
           block={props.block as any}
-          onMoreClick={_onMoreClickCallback}
+          onMoreClick={handleAnalysisForListMore}
         />
       )
     },

@@ -1,10 +1,10 @@
 import React, { Component, RefObject } from 'react'
 import { BlockNoteEditor, BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core'
 import { BlockNoteView } from '@blocknote/mantine'
-import { annotationBlockSpec, setAnnotationCallback, annotationBlockUtils } from './AnnotationBlock'
+import { annotationBlockSpec, annotationBlockUtils } from './AnnotationBlock'
 import { toggleBlockSpec, toggleBlockUtils } from './ToggleBlock'
 import { listBlockUtils } from './ListBlock'
-import { moreButtonBlockSpec, setMoreButtonCallback } from './MoreButtonBlock'
+import { moreButtonBlockSpec } from './MoreButtonBlock'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { Note, Annotation, BaseBlock, AnnotationBlock } from './types'
@@ -157,31 +157,16 @@ class Editor extends Component<EditorProps, EditorState> {
         this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
       }
       if (getChanges) {
-        if (this.editor) {
-          toggleBlockUtils.detectToggleDeletion(getChanges(), this.editor, (updatedBlock) => {
-            // Delete the updated block itself when toggle is converted to paragraph
-            this.editor?.removeBlocks([updatedBlock])
-          })
-        }
-        annotationBlockUtils.detectAnnotation(getChanges(), editorInstance, (blockId) => {
-          this.handleAnalysis(blockId)
+        const changes = getChanges()
+        toggleBlockUtils.detectToggleDeletion(changes, editorInstance, (updatedBlock) => {
+          // Delete the updated block itself when toggle is converted to paragraph
+          editorInstance.removeBlocks([updatedBlock])
         })
-        listBlockUtils.detectListCompletion(getChanges(), editorInstance, async (lastListItemId) => {
-          if (this.editor) {
-            this.setState({ isAnalyzing: true })
-            try {
-              const doc = this.editor.document as BaseBlock[]
-              const fullNoteText = await this.convertDocToMarkdown(doc)
-              await listBlockUtils.handleCompletion(
-                this.editor,
-                lastListItemId,
-                fullNoteText
-              )
-            } catch (error) {
-              console.error('Error analyzing list:', error)
-            }
-            this.setState({ isAnalyzing: false })
-          }
+        annotationBlockUtils.detectAnnotation(changes, editorInstance, (blockId) => {
+          this.handleAnalysisForAnnotation(blockId)
+        })
+        listBlockUtils.detectListCompletion(changes, editorInstance, (lastListItemId) => {
+          this.handleAnalysisForList(lastListItemId)
         })
       }
     })
@@ -197,10 +182,6 @@ class Editor extends Component<EditorProps, EditorState> {
     // Destroy without updating state to avoid unmounting BlockNoteView prematurely
     // The key prop on BlockNoteView will force it to remount with the new editor
     this.destroy()
-
-    // Set the callbacks before creating the schema
-    setAnnotationCallback(this.handleAnalysisForAnnotation)
-    setMoreButtonCallback(this.handleMoreButtonClick)
 
     // createReactBlockSpec returns a function, so we need to call it to get the spec object
     const annotationSpec = annotationBlockSpec()
@@ -227,6 +208,12 @@ class Editor extends Component<EditorProps, EditorState> {
     }) as BlockNoteEditor
 
     this.editor = editor
+
+    // Attach editor methods directly to the editor instance
+    // This allows blocks to access them without module-level callbacks
+    ;(editor as any).handleAnalysisForAnnotationMore = this.handleAnalysisForAnnotationMore
+    ;(editor as any).handleAnalysisForListMore = this.handleAnalysisForListMore
+
     this.blocks = Array.isArray(note.content) ? note.content : []
     this.attachListeners(editor)
     this.setState({ editor })
@@ -269,8 +256,83 @@ class Editor extends Component<EditorProps, EditorState> {
     return null
   }
 
+  /**
+   * Inserts an empty toggle block after the given block ID
+   * Returns the ID of the inserted toggle block
+   */
+  insertToggle(editor: BlockNoteEditor, afterBlockId: string): string | null {
+    if (!editor) return null
 
+    const toggleBlock = {
+      type: 'toggle',
+      props: {
+        textContent: 'More examples',
+      },
+    } as any
 
+    editor.insertBlocks([toggleBlock], afterBlockId, 'after')
+
+    // Find the inserted toggle block
+    const doc = editor.document as BaseBlock[]
+    const afterBlockIndex = doc.findIndex((b) => b.id === afterBlockId)
+    if (afterBlockIndex !== -1 && afterBlockIndex + 1 < doc.length) {
+      const insertedToggleBlock = doc[afterBlockIndex + 1]
+      if (insertedToggleBlock && insertedToggleBlock.type === 'toggle') {
+        return insertedToggleBlock.id
+      }
+    }
+    return null
+  }
+
+  /**
+   * Inserts list items and a moreButton into a toggle block
+   * Returns the toggle block ID
+   */
+  insertList(editor: BlockNoteEditor, toggleBlockId: string, items: string[]): string | null {
+    if (!editor || items.length === 0) return null
+
+    const doc = editor.document as BaseBlock[]
+    const toggleBlock = doc.find((b) => b.id === toggleBlockId && b.type === 'toggle')
+    if (!toggleBlock) return null
+
+    // Create list item blocks
+    const listItems = items.map((text) => ({
+      type: 'bulletListItem',
+      content: text,
+    }))
+
+    // Create moreButton block with toggleBlockId
+    const moreButton = {
+      type: 'moreButton',
+      props: {
+        toggleBlockId: toggleBlockId,
+      },
+    }
+
+    // Insert all children into the toggle block
+    const children = [...listItems, moreButton] as any
+    editor.updateBlock(toggleBlockId, {
+      children: children,
+    })
+
+    return toggleBlockId
+  }
+
+  /**
+   * Handles inserting a toggle block and then inserting list items into it
+   * Returns the toggle block ID
+   */
+  handleInsertList(editor: BlockNoteEditor, afterBlockId: string, items: string[]): string | null {
+    if (!editor || items.length === 0) return null
+
+    // Insert toggle block first
+    const toggleBlockId = this.insertToggle(editor, afterBlockId)
+    if (!toggleBlockId) return null
+
+    // Then insert list items into the toggle
+    this.insertList(editor, toggleBlockId, items)
+    return toggleBlockId
+  }
 
   private convertDocToMarkdown = async (doc: BaseBlock[]): Promise<string> => {
     if (!this.editor) return ''
@@ -336,7 +398,7 @@ class Editor extends Component<EditorProps, EditorState> {
     return this.collapseBlocks(paragraphBlocks)
   }
 
-  handleAnalysis = async (blockId: string) => {
+  handleAnalysisForAnnotation = async (blockId: string) => {
     if (!this.props.note) return
 
     this.setState({ isAnalyzing: true })
@@ -376,7 +438,7 @@ class Editor extends Component<EditorProps, EditorState> {
     this.setState({ isAnalyzing: false })
   }
 
-  handleAnalysisForAnnotation = async (annotationBlockId: string, sourceBlockId: string, existingAnnotations: Annotation[]) => {
+  handleAnalysisForAnnotationMore = async (annotationBlockId: string, sourceBlockId: string, existingAnnotations: Annotation[]) => {
     if (!this.props.note) return
 
     this.setState({ isAnalyzing: true })
@@ -417,7 +479,28 @@ class Editor extends Component<EditorProps, EditorState> {
     this.setState({ isAnalyzing: false })
   }
 
-  handleMoreButtonClick = async (toggleBlockId: string) => {
+  handleAnalysisForList = async (lastListItemId: string) => {
+    if (!this.editor) return
+
+    this.setState({ isAnalyzing: true })
+
+    try {
+      const doc = this.editor.document as BaseBlock[]
+      const fullNoteText = await this.convertDocToMarkdown(doc)
+      await listBlockUtils.handleCompletion(
+        this.editor,
+        lastListItemId,
+        fullNoteText,
+        (afterBlockId: string, items: string[]) => this.handleInsertList(this.editor!, afterBlockId, items)
+      )
+    } catch (error) {
+      console.error('Error analyzing list:', error)
+    }
+
+    this.setState({ isAnalyzing: false })
+  }
+
+  handleAnalysisForListMore = async (toggleBlockId: string) => {
     if (!this.props.note || !this.editor) return
 
     this.setState({ isAnalyzing: true })
