@@ -8,6 +8,7 @@ import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { Note, Annotation, BaseBlock, AnnotationBlock } from './types'
 import { analyzeNote, analyzeBlock, analyzeListItems } from './analyzer'
+import { createPasteHandler } from './pasteHandler'
 
 interface EditorProps {
   note: Note | null
@@ -88,23 +89,6 @@ class Editor extends Component<EditorProps, EditorState> {
     this.editor = null
   }
 
-  handlePaste = ({ event, editor: _editor, defaultPasteHandler }: { event: ClipboardEvent; editor: any; defaultPasteHandler: (opts?: any) => any }): boolean => {
-    const htmlData = event.clipboardData?.getData('text/html')
-    const plainText = event.clipboardData?.getData('text/plain')
-
-    // If there's HTML content, let BlockNote handle it (it can parse markdown from HTML)
-    if (htmlData) {
-      return defaultPasteHandler({ prioritizeMarkdownOverHTML: true })
-    }
-
-    // If there's plain text, let BlockNote parse it as markdown
-    if (plainText) {
-      return defaultPasteHandler({ plainTextAsMarkdown: true })
-    }
-
-    // Fallback to default behavior
-    return defaultPasteHandler()
-  }
 
   private isEmpty = (block: BaseBlock): boolean => {
     if (!block || block.type !== 'paragraph') return false
@@ -262,8 +246,7 @@ class Editor extends Component<EditorProps, EditorState> {
     const editor = BlockNoteEditor.create({
       schema,
       initialContent: Array.isArray(note.content) && note.content.length > 0 ? note.content : undefined,
-      pasteHandler: ({ event, editor, defaultPasteHandler }: { event: ClipboardEvent; editor: any; defaultPasteHandler: (opts?: any) => any }) =>
-        this.handlePaste({ event, editor, defaultPasteHandler }),
+      pasteHandler: createPasteHandler(),
       placeholders: {
         emptyDocument: 'Your germ of an idea...',
         default: ''
