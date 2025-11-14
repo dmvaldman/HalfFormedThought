@@ -3,11 +3,12 @@ import { BlockNoteEditor, BlockNoteSchema, defaultBlockSpecs } from '@blocknote/
 import { BlockNoteView } from '@blocknote/mantine'
 import { annotationBlockSpec, setAnnotationCallback, annotationBlockUtils } from './AnnotationBlock'
 import { toggleBlockSpec, toggleBlockUtils } from './ToggleBlock'
+import { listBlockUtils } from './ListBlock'
 import { moreButtonBlockSpec, setMoreButtonCallback } from './MoreButtonBlock'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
 import { Note, Annotation, BaseBlock, AnnotationBlock } from './types'
-import { analyzeNote, analyzeBlock, analyzeListItems } from './analyzer'
+import { analyzeNote, analyzeBlock } from './analyzer'
 import { createPasteHandler } from './pasteHandler'
 
 interface EditorProps {
@@ -142,46 +143,6 @@ class Editor extends Component<EditorProps, EditorState> {
     }
   }
 
-  private detectListCompletion = (editorInstance: any, getChanges: () => any[]) => {
-    const changes = getChanges()
-    for (const ch of changes) {
-      // Handle update case: when an empty list item becomes a paragraph
-      if (ch.type === 'update' && ch.block) {
-        const updatedBlock = ch.block as BaseBlock
-        const prevBlock = ch.prevBlock as BaseBlock
-
-        if (prevBlock && prevBlock.type === 'toggle') {
-          continue
-        }
-
-        // Check if the updated block is now a paragraph and was previously a list item
-        if (updatedBlock.type === 'paragraph' &&
-            prevBlock &&
-            (prevBlock.type === 'bulletListItem' || prevBlock.type === 'numberedListItem')) {
-          const docArr = editorInstance.document as BaseBlock[]
-          const idx = docArr.findIndex((b) => b.id === updatedBlock.id)
-          if (idx < 1) continue
-
-          const prev = docArr[idx - 1]
-
-          // Check if previous block is a list item
-          if (prev && (prev.type === 'bulletListItem' || prev.type === 'numberedListItem')) {
-            // Only trigger list completion if there are NO list items or toggle blocks after the converted paragraph
-            // This ensures we only analyze when exiting the END of a list, not the middle
-            const next = idx + 1 < docArr.length ? docArr[idx + 1] : null
-            const hasListOrToggleAfter = next &&
-              (next.type === 'bulletListItem' ||
-               next.type === 'numberedListItem' ||
-               next.type === 'toggle')
-
-            if (!hasListOrToggleAfter) {
-              this.handleListCompletion(prev.id)
-            }
-          }
-        }
-      }
-    }
-  }
 
 
   private attachListeners(editor: any) {
@@ -205,7 +166,23 @@ class Editor extends Component<EditorProps, EditorState> {
         annotationBlockUtils.detectAnnotation(getChanges(), editorInstance, (blockId) => {
           this.handleAnalysis(blockId)
         })
-        this.detectListCompletion(editorInstance, getChanges)
+        listBlockUtils.detectListCompletion(getChanges(), editorInstance, async (lastListItemId) => {
+          if (this.editor) {
+            this.setState({ isAnalyzing: true })
+            try {
+              const doc = this.editor.document as BaseBlock[]
+              const fullNoteText = await this.convertDocToMarkdown(doc)
+              await listBlockUtils.handleCompletion(
+                this.editor,
+                lastListItemId,
+                fullNoteText
+              )
+            } catch (error) {
+              console.error('Error analyzing list:', error)
+            }
+            this.setState({ isAnalyzing: false })
+          }
+        })
       }
     })
   }
@@ -269,38 +246,30 @@ class Editor extends Component<EditorProps, EditorState> {
       .join('')
   }
 
-
-  private getListText = (doc: BaseBlock[], listItemId: string): string => {
-    const listItem = doc.find((b) => b.id === listItemId)
-    if (!listItem || (listItem.type !== 'bulletListItem' && listItem.type !== 'numberedListItem')) {
-      return ''
-    }
-
-    const listItems: BaseBlock[] = []
-    const itemIdx = doc.findIndex((b) => b.id === listItemId)
-
-    // Go backwards to find the start of the list
-    for (let i = itemIdx; i >= 0; i--) {
-      const block = doc[i]
-      if (block.type === listItem.type) {
-        listItems.unshift(block)
-      } else {
-        break
+  /**
+   * Recursively finds the parent block that contains the given block ID as a child
+   */
+  findParentBlock(blocks: BaseBlock[], targetId: string): BaseBlock | null {
+    for (const block of blocks) {
+      if (block.id === targetId) {
+        return null // Found the target, but we need its parent
+      }
+      if (Array.isArray(block.children)) {
+        const child = block.children.find((c) => c.id === targetId)
+        if (child) {
+          return block // Found parent
+        }
+        // Recursively search nested children
+        const nestedParent = this.findParentBlock(block.children, targetId)
+        if (nestedParent) {
+          return nestedParent
+        }
       }
     }
-
-    // Go forwards to find the end of the list
-    for (let i = itemIdx + 1; i < doc.length; i++) {
-      const block = doc[i]
-      if (block.type === listItem.type) {
-        listItems.push(block)
-      } else {
-        break
-      }
-    }
-
-    return listItems.map((item) => this.getText(item)).filter(Boolean).join('\n')
+    return null
   }
+
+
 
 
   private convertDocToMarkdown = async (doc: BaseBlock[]): Promise<string> => {
@@ -448,101 +417,22 @@ class Editor extends Component<EditorProps, EditorState> {
     this.setState({ isAnalyzing: false })
   }
 
-  handleListCompletion = async (lastListItemId: string) => {
+  handleMoreButtonClick = async (toggleBlockId: string) => {
     if (!this.props.note || !this.editor) return
 
     this.setState({ isAnalyzing: true })
 
     try {
       const doc = this.editor.document as BaseBlock[]
-      const listText = this.getListText(doc, lastListItemId)
-      if (!listText) {
-        this.setState({ isAnalyzing: false })
-        return
-      }
-
-      // Convert all blocks to markdown for context
       const fullNoteText = await this.convertDocToMarkdown(doc)
-
-      const newItems = await analyzeListItems(fullNoteText, listText)
-
-      if (newItems.length > 0) {
-        this.insertListBlock(lastListItemId, newItems)
-      }
-    } catch (error) {
-      console.error('Error analyzing list:', error)
-    }
-
-    this.setState({ isAnalyzing: false })
-  }
-
-  private insertListBlock = (afterBlockId: string, items: string[]) => {
-    if (!this.editor || items.length === 0) return
-
-    // Insert the toggle block with list items, ending with a more button as the last child
-    const toggleBlock = toggleBlockUtils.createToggleBlock(items)
-    this.editor.insertBlocks([toggleBlock], afterBlockId, 'after')
-
-    // Update the moreButton with the toggleBlockId after insertion
-    const doc = this.editor.document as BaseBlock[]
-    const afterBlockIndex = doc.findIndex((b) => b.id === afterBlockId)
-    if (afterBlockIndex !== -1 && afterBlockIndex + 1 < doc.length) {
-      const insertedToggleBlock = doc[afterBlockIndex + 1]
-      if (insertedToggleBlock && insertedToggleBlock.type === 'toggle') {
-        const existingChildren = Array.isArray(insertedToggleBlock.children) ? insertedToggleBlock.children : []
-        const lastChild = existingChildren[existingChildren.length - 1]
-        if (lastChild && lastChild.type === 'moreButton') {
-          this.editor.updateBlock(insertedToggleBlock.id, {
-            children: [
-              ...existingChildren.slice(0, -1),
-              {
-                ...lastChild,
-                props: {
-                  toggleBlockId: insertedToggleBlock.id,
-                },
-              },
-            ],
-          })
-        }
-      }
-    }
-  }
-
-  handleMoreButtonClick = async (moreButtonBlockId: string) => {
-    if (!this.props.note || !this.editor) return
-
-    this.setState({ isAnalyzing: true })
-
-    try {
-      const doc = this.editor.document as BaseBlock[]
-
-      // Find the toggle block that contains the moreButton as a child
-      const toggleBlock = doc.find(
-        (block) =>
-          block.type === 'toggle' &&
-          Array.isArray(block.children) &&
-          block.children.some((child) => child.id === moreButtonBlockId || child.type === 'moreButton')
+      // Create a bound version of findParentBlock to pass to handleMore
+      const findParentBlock = (blocks: BaseBlock[], targetId: string) => this.findParentBlock(blocks, targetId)
+      await listBlockUtils.handleMore(
+        this.editor,
+        toggleBlockId,
+        fullNoteText,
+        findParentBlock
       )
-
-      if (!toggleBlock || toggleBlock.type !== 'toggle') {
-        this.setState({ isAnalyzing: false })
-        return
-      }
-
-      // Get the list text from the toggle block's children
-      const listText = toggleBlockUtils.getListText(toggleBlock, this.getText)
-      if (!listText) {
-        this.setState({ isAnalyzing: false })
-        return
-      }
-
-      // Analyze for more list items
-      const fullNoteText = await this.convertDocToMarkdown(doc)
-      const newItems = await analyzeListItems(fullNoteText, listText)
-
-      if (newItems.length > 0) {
-        toggleBlockUtils.appendItems(this.editor, toggleBlock.id, newItems)
-      }
     } catch (error) {
       console.error('Error handling more button click:', error)
     }

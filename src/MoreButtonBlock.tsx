@@ -10,7 +10,9 @@ interface MoreButtonBlockProps {
 const MoreButtonBlock: React.FC<MoreButtonBlockProps> = ({ block, onMoreClick }) => {
   const handleClick = async () => {
     if (onMoreClick) {
-      await onMoreClick(block.id)
+      // Get toggleBlockId from block props (set when the moreButton is created)
+      const toggleBlockId = (block.props as any)?.toggleBlockId || ''
+      await onMoreClick(toggleBlockId)
     }
   }
 
