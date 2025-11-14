@@ -4,13 +4,17 @@ import { createReactBlockSpec, ToggleWrapper } from '@blocknote/react'
 export const toggleBlockSpec = createReactBlockSpec(
   {
     type: 'toggle',
-    propSchema: {},
-    content: 'inline',
+    propSchema: {
+      textContent: {
+        default: 'More examples',
+      },
+    },
+    content: 'none',
   },
   {
     render: (props) => (
       <ToggleWrapper block={props.block} editor={props.editor}>
-        <p ref={props.contentRef} />
+        <span>{(props.block.props as any).textContent}</span>
       </ToggleWrapper>
     ),
   }

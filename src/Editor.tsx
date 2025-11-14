@@ -148,6 +148,43 @@ class Editor extends Component<EditorProps, EditorState> {
     }
   }
 
+  private detectToggleDelete = (_editorInstance: any, getChanges: () => any[]) => {
+    const changes = getChanges()
+    for (const ch of changes) {
+      // Handle update case: when a toggle block is converted to a paragraph
+      if (ch.type === 'update' && ch.block) {
+        const updatedBlock = ch.block as BaseBlock
+        const prevBlock = ch.prevBlock as BaseBlock
+
+        // If a toggle block is being converted to a paragraph, delete its children
+        if (prevBlock && prevBlock.type === 'toggle' && updatedBlock.type === 'paragraph') {
+          if (Array.isArray(prevBlock.children) && prevBlock.children.length > 0 && this.editor) {
+            // Recursively collect all child blocks from the previous toggle block
+            const collectChildBlocks = (block: BaseBlock): BaseBlock[] => {
+              const childBlocks: BaseBlock[] = []
+              if (Array.isArray(block.children)) {
+                for (const child of block.children) {
+                  childBlocks.push(child)
+                  // Recursively collect nested children
+                  if (Array.isArray(child.children)) {
+                    childBlocks.push(...collectChildBlocks(child))
+                  }
+                }
+              }
+              return childBlocks
+            }
+
+            const blocksToDelete = collectChildBlocks(prevBlock)
+
+            if (blocksToDelete.length > 0) {
+              this.editor.removeBlocks(blocksToDelete)
+            }
+          }
+        }
+      }
+    }
+  }
+
   private detectListCompletion = (editorInstance: any, getChanges: () => any[]) => {
     const changes = getChanges()
     for (const ch of changes) {
@@ -220,6 +257,7 @@ class Editor extends Component<EditorProps, EditorState> {
         this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
       }
       if (getChanges) {
+        this.detectToggleDelete(editorInstance, getChanges)
         this.detectDoubleEnter(editorInstance, getChanges)
         this.detectListCompletion(editorInstance, getChanges)
       }
@@ -519,7 +557,9 @@ class Editor extends Component<EditorProps, EditorState> {
       [
         {
           type: 'toggle',
-          content: 'More examples',
+          props: {
+            textContent: 'More examples',
+          },
           children: [
             ...items.map((text) => ({
               type: 'bulletListItem',
