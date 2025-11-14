@@ -1,8 +1,8 @@
 import React, { Component, RefObject } from 'react'
 import { BlockNoteEditor, BlockNoteSchema, defaultBlockSpecs } from '@blocknote/core'
 import { BlockNoteView } from '@blocknote/mantine'
-import { annotationBlockSpec, setAnnotationCallback } from './AnnotationBlock'
-import { toggleBlockSpec } from './ToggleBlock'
+import { annotationBlockSpec, setAnnotationCallback, annotationBlockUtils } from './AnnotationBlock'
+import { toggleBlockSpec, toggleBlockUtils } from './ToggleBlock'
 import { moreButtonBlockSpec, setMoreButtonCallback } from './MoreButtonBlock'
 import '@blocknote/core/fonts/inter.css'
 import '@blocknote/mantine/style.css'
@@ -90,12 +90,6 @@ class Editor extends Component<EditorProps, EditorState> {
   }
 
 
-  private isEmpty = (block: BaseBlock): boolean => {
-    if (!block || block.type !== 'paragraph') return false
-    const inlines = block.content || []
-    const text = inlines.map((n: any) => (n.text || '')).join('')
-    return text.trim() === ''
-  }
 
   private insertAnnotation = (afterBlockId: string, annotations: Annotation[], sourceBlockId: string) => {
     if (!this.editor || annotations.length === 0) return
@@ -148,43 +142,6 @@ class Editor extends Component<EditorProps, EditorState> {
     }
   }
 
-  private detectToggleDelete = (_editorInstance: any, getChanges: () => any[]) => {
-    const changes = getChanges()
-    for (const ch of changes) {
-      // Handle update case: when a toggle block is converted to a paragraph
-      if (ch.type === 'update' && ch.block) {
-        const updatedBlock = ch.block as BaseBlock
-        const prevBlock = ch.prevBlock as BaseBlock
-
-        // If a toggle block is being converted to a paragraph, delete its children
-        if (prevBlock && prevBlock.type === 'toggle' && updatedBlock.type === 'paragraph') {
-          if (Array.isArray(prevBlock.children) && prevBlock.children.length > 0 && this.editor) {
-            // Recursively collect all child blocks from the previous toggle block
-            const collectChildBlocks = (block: BaseBlock): BaseBlock[] => {
-              const childBlocks: BaseBlock[] = []
-              if (Array.isArray(block.children)) {
-                for (const child of block.children) {
-                  childBlocks.push(child)
-                  // Recursively collect nested children
-                  if (Array.isArray(child.children)) {
-                    childBlocks.push(...collectChildBlocks(child))
-                  }
-                }
-              }
-              return childBlocks
-            }
-
-            const blocksToDelete = collectChildBlocks(prevBlock)
-
-            if (blocksToDelete.length > 0) {
-              this.editor.removeBlocks(blocksToDelete)
-            }
-          }
-        }
-      }
-    }
-  }
-
   private detectListCompletion = (editorInstance: any, getChanges: () => any[]) => {
     const changes = getChanges()
     for (const ch of changes) {
@@ -226,24 +183,6 @@ class Editor extends Component<EditorProps, EditorState> {
     }
   }
 
-  private detectDoubleEnter = (editorInstance: any, getChanges: () => any[]) => {
-    const changes = getChanges()
-    for (const ch of changes) {
-      if (ch.type !== 'insert') continue
-      const inserted = ch.block as BaseBlock
-      if (!inserted || inserted.type !== 'paragraph') continue
-      const docArr = editorInstance.document as BaseBlock[]
-      const idx = docArr.findIndex((b) => b.id === inserted.id)
-      if (idx < 2) continue
-      const prev = docArr[idx - 1]
-      const prevPrev = docArr[idx - 2]
-      const isPrevEmpty = this.isEmpty(prev)
-      const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !this.isEmpty(prevPrev)
-      if (isPrevEmpty && isPrevPrevNonEmpty) {
-        this.handleAnalysis(prevPrev.id)
-      }
-    }
-  }
 
   private attachListeners(editor: any) {
     if (this.unsubscribeChange) {
@@ -257,8 +196,15 @@ class Editor extends Component<EditorProps, EditorState> {
         this.props.onUpdateNote(this.props.note.id, this.state.title, doc)
       }
       if (getChanges) {
-        this.detectToggleDelete(editorInstance, getChanges)
-        this.detectDoubleEnter(editorInstance, getChanges)
+        if (this.editor) {
+          toggleBlockUtils.detectToggleDeletion(getChanges(), this.editor, (updatedBlock) => {
+            // Delete the updated block itself when toggle is converted to paragraph
+            this.editor?.removeBlocks([updatedBlock])
+          })
+        }
+        annotationBlockUtils.detectAnnotation(getChanges(), editorInstance, (blockId) => {
+          this.handleAnalysis(blockId)
+        })
         this.detectListCompletion(editorInstance, getChanges)
       }
     })
@@ -356,25 +302,6 @@ class Editor extends Component<EditorProps, EditorState> {
     return listItems.map((item) => this.getText(item)).filter(Boolean).join('\n')
   }
 
-  private getToggleBlockListText = (toggleBlock: BaseBlock): string => {
-    if (!toggleBlock || toggleBlock.type !== 'toggle') {
-      return ''
-    }
-
-    const children = Array.isArray(toggleBlock.children) ? toggleBlock.children : []
-    // Filter out moreButton blocks - they're not actual list items
-    return children
-      .filter((child) => child.type !== 'moreButton')
-      .map((child) => {
-        // Handle both string content and array content formats
-        if (typeof child.content === 'string') {
-          return child.content
-        }
-        return this.getText(child)
-      })
-      .filter(Boolean)
-      .join('\n')
-  }
 
   private convertDocToMarkdown = async (doc: BaseBlock[]): Promise<string> => {
     if (!this.editor) return ''
@@ -553,51 +480,32 @@ class Editor extends Component<EditorProps, EditorState> {
     if (!this.editor || items.length === 0) return
 
     // Insert the toggle block with list items, ending with a more button as the last child
-    this.editor.insertBlocks(
-      [
-        {
-          type: 'toggle',
-          props: {
-            textContent: 'More examples',
-          },
-          children: [
-            ...items.map((text) => ({
-              type: 'bulletListItem',
-              content: text,
-            })),
-            {
-              type: 'moreButton',
-            },
-          ],
-        },
-      ],
-      afterBlockId,
-      'after'
-    )
-  }
+    const toggleBlock = toggleBlockUtils.createToggleBlock(items)
+    this.editor.insertBlocks([toggleBlock], afterBlockId, 'after')
 
-  private appendToListBlock = (listBlockId: string, newItems: string[]) => {
-    if (!this.editor || newItems.length === 0) return
+    // Update the moreButton with the toggleBlockId after insertion
     const doc = this.editor.document as BaseBlock[]
-    const toggleBlock = doc.find((b) => b.id === listBlockId && b.type === 'toggle')
-    if (!toggleBlock) return
-    const existingChildren = Array.isArray(toggleBlock.children) ? toggleBlock.children : []
-    const appendedChildren = newItems.map((text) => ({
-      type: 'bulletListItem',
-      content: text,
-    }))
-
-    // Check if the last child is a moreButton - if so, insert before it to keep it last
-    const lastChild = existingChildren[existingChildren.length - 1]
-    const hasMoreButton = lastChild && lastChild.type === 'moreButton'
-
-    const updatedChildren = hasMoreButton
-      ? [...existingChildren.slice(0, -1), ...appendedChildren, lastChild]
-      : [...existingChildren, ...appendedChildren]
-
-    this.editor.updateBlock(toggleBlock.id, {
-      children: updatedChildren,
-    })
+    const afterBlockIndex = doc.findIndex((b) => b.id === afterBlockId)
+    if (afterBlockIndex !== -1 && afterBlockIndex + 1 < doc.length) {
+      const insertedToggleBlock = doc[afterBlockIndex + 1]
+      if (insertedToggleBlock && insertedToggleBlock.type === 'toggle') {
+        const existingChildren = Array.isArray(insertedToggleBlock.children) ? insertedToggleBlock.children : []
+        const lastChild = existingChildren[existingChildren.length - 1]
+        if (lastChild && lastChild.type === 'moreButton') {
+          this.editor.updateBlock(insertedToggleBlock.id, {
+            children: [
+              ...existingChildren.slice(0, -1),
+              {
+                ...lastChild,
+                props: {
+                  toggleBlockId: insertedToggleBlock.id,
+                },
+              },
+            ],
+          })
+        }
+      }
+    }
   }
 
   handleMoreButtonClick = async (moreButtonBlockId: string) => {
@@ -622,7 +530,7 @@ class Editor extends Component<EditorProps, EditorState> {
       }
 
       // Get the list text from the toggle block's children
-      const listText = this.getToggleBlockListText(toggleBlock)
+      const listText = toggleBlockUtils.getListText(toggleBlock, this.getText)
       if (!listText) {
         this.setState({ isAnalyzing: false })
         return
@@ -633,7 +541,7 @@ class Editor extends Component<EditorProps, EditorState> {
       const newItems = await analyzeListItems(fullNoteText, listText)
 
       if (newItems.length > 0) {
-        this.appendToListBlock(toggleBlock.id, newItems)
+        toggleBlockUtils.appendItems(this.editor, toggleBlock.id, newItems)
       }
     } catch (error) {
       console.error('Error handling more button click:', error)

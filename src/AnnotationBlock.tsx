@@ -186,4 +186,43 @@ export const annotationBlockSpec = createReactBlockSpec(
   }
 )
 
+// Annotation block utilities
+export const annotationBlockUtils = {
+  /**
+   * Checks if a block is empty (paragraph with no text content)
+   */
+  isEmpty(block: any): boolean {
+    if (!block || block.type !== 'paragraph') return false
+    const inlines = block.content || []
+    const text = inlines.map((n: any) => (n.text || '')).join('')
+    return text.trim() === ''
+  },
+
+  /**
+   * Detects double line break (empty paragraph between two non-empty paragraphs)
+   * and triggers analysis on the paragraph before the empty one
+   */
+  detectAnnotation(
+    changes: any[],
+    editorInstance: any,
+    onAnalysis: (blockId: string) => void
+  ): void {
+    for (const ch of changes) {
+      if (ch.type !== 'insert') continue
+      const inserted = ch.block
+      if (!inserted || inserted.type !== 'paragraph') continue
+      const docArr = editorInstance.document
+      const idx = docArr.findIndex((b: any) => b.id === inserted.id)
+      if (idx < 2) continue
+      const prev = docArr[idx - 1]
+      const prevPrev = docArr[idx - 2]
+      const isPrevEmpty = annotationBlockUtils.isEmpty(prev)
+      const isPrevPrevNonEmpty = prevPrev?.type === 'paragraph' && !annotationBlockUtils.isEmpty(prevPrev)
+      if (isPrevEmpty && isPrevPrevNonEmpty) {
+        onAnalysis(prevPrev.id)
+      }
+    }
+  },
+}
+
 export default AnnotationBlock
