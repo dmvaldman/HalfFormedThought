@@ -285,21 +285,57 @@ class Editor extends Component<EditorProps, EditorState> {
   }
 
   /**
-   * Inserts list items and a moreButton into a toggle block
-   * Returns the toggle block ID
+   * Inserts list items into any block (as children)
+   * Returns the parent block ID
    */
-  insertList(editor: BlockNoteEditor, toggleBlockId: string, items: string[]): string | null {
+  insertList(editor: BlockNoteEditor, parentBlockId: string, items: string[]): string | null {
     if (!editor || items.length === 0) return null
 
     const doc = editor.document as BaseBlock[]
-    const toggleBlock = doc.find((b) => b.id === toggleBlockId && b.type === 'toggle')
-    if (!toggleBlock) return null
+    const parentBlock = doc.find((b) => b.id === parentBlockId)
+    if (!parentBlock) return null
 
     // Create list item blocks
     const listItems = items.map((text) => ({
       type: 'bulletListItem',
       content: text,
     }))
+
+    // Get existing children or create empty array
+    const existingChildren = Array.isArray(parentBlock.children) ? parentBlock.children : []
+
+    // Insert list items as children
+    const children = [...existingChildren, ...listItems] as any
+    editor.updateBlock(parentBlockId, {
+      children: children,
+    })
+
+    return parentBlockId
+  }
+
+  /**
+   * Inserts a moreButton at the end of a list within a toggle block
+   * Returns the toggle block ID if successful, null otherwise
+   */
+  insertMore(editor: BlockNoteEditor, toggleBlockId: string): string | null {
+    if (!editor) return null
+
+    const doc = editor.document as BaseBlock[]
+    const toggleBlock = doc.find((b) => b.id === toggleBlockId && b.type === 'toggle')
+    if (!toggleBlock) return null
+
+    const children = Array.isArray(toggleBlock.children) ? toggleBlock.children : []
+
+    // Check if there are any list items
+    const hasListItems = children.some(
+      (child) => child.type === 'bulletListItem' || child.type === 'numberedListItem'
+    )
+
+    if (!hasListItems) return null
+
+    // Check if moreButton already exists
+    const hasMoreButton = children.some((child) => child.type === 'moreButton')
+    if (hasMoreButton) return toggleBlockId
 
     // Create moreButton block with toggleBlockId
     const moreButton = {
@@ -309,10 +345,10 @@ class Editor extends Component<EditorProps, EditorState> {
       },
     }
 
-    // Insert all children into the toggle block
-    const children = [...listItems, moreButton] as any
+    // Insert moreButton at the end
+    const updatedChildren = [...children, moreButton] as any
     editor.updateBlock(toggleBlockId, {
-      children: children,
+      children: updatedChildren,
     })
 
     return toggleBlockId
@@ -331,6 +367,10 @@ class Editor extends Component<EditorProps, EditorState> {
 
     // Then insert list items into the toggle
     this.insertList(editor, toggleBlockId, items)
+
+    // Finally, insert moreButton at the end of the list
+    this.insertMore(editor, toggleBlockId)
+
     return toggleBlockId
   }
 
