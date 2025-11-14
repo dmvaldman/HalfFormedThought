@@ -160,8 +160,10 @@ class Editor extends Component<EditorProps, EditorState> {
           continue
         }
 
-        // Check if the updated block is now a paragraph
-        if (updatedBlock.type === 'paragraph') {
+        // Check if the updated block is now a paragraph and was previously a list item
+        if (updatedBlock.type === 'paragraph' &&
+            prevBlock &&
+            (prevBlock.type === 'bulletListItem' || prevBlock.type === 'numberedListItem')) {
           const docArr = editorInstance.document as BaseBlock[]
           const idx = docArr.findIndex((b) => b.id === updatedBlock.id)
           if (idx < 1) continue
@@ -170,7 +172,17 @@ class Editor extends Component<EditorProps, EditorState> {
 
           // Check if previous block is a list item
           if (prev && (prev.type === 'bulletListItem' || prev.type === 'numberedListItem')) {
-            this.handleListCompletion(prev.id)
+            // Only trigger list completion if there are NO list items or toggle blocks after the converted paragraph
+            // This ensures we only analyze when exiting the END of a list, not the middle
+            const next = idx + 1 < docArr.length ? docArr[idx + 1] : null
+            const hasListOrToggleAfter = next &&
+              (next.type === 'bulletListItem' ||
+               next.type === 'numberedListItem' ||
+               next.type === 'toggle')
+
+            if (!hasListOrToggleAfter) {
+              this.handleListCompletion(prev.id)
+            }
           }
         }
       }
