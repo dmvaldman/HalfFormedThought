@@ -11,11 +11,12 @@ const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
 Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
 Form your response as JSON with replies to each section of the essay {block_id: annotations}.
-where annotations is an array (0-3 in length) of {description, title, author, domain} (all fields are optional except description, title, domain):
+where annotations is an array (0-3 in length) of {description, title, author, domain, search_query} (all fields are optional except description, title, domain):
 - \`description\` is a short summary of the source (0-4 sentences)
 - \`title\` is the name of the source (book title, essay title, etc).
 - \`author\` is the name of the author (person name, optional)
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
+- \`search_query\` is a search query that will be used by a search engine to find more information about the source (optional)
 `.trim()
 
 const temperature = 0.6
@@ -46,7 +47,8 @@ const ANNOTATIONS_SCHEMA = {
           description: { type: 'string' },
           title: { type: 'string' },
           author: { type: 'string' },
-          domain: { type: 'string' }
+          domain: { type: 'string' },
+          search_query: { type: 'string' }
         },
         required: ['description', 'title', 'domain']
       }
@@ -412,11 +414,12 @@ Focus specifically on this section:
 
 ${currentBlockText}
 
-Form your response as JSON {annotations: [annotation,...]} where annotations is a NON-EMPTY array (1-3 in length) of {description, title, author, domain}:
+Form your response as JSON {annotations: [annotation,...]} where annotations is a NON-EMPTY array (1-3 in length) of {description, title, author, domain, search_query}:
 - \`description\` is a short summary of the source (1-4 sentences)
 - \`title\` is the name of the source (book title, essay title, etc).
 - \`author\` is the name of the author (person name, optional)
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
+- \`search_query\` is a search query that will be used by a search engine to find more information about the source (optional)
 
 You MUST provide at least one annotation.${existingSourcesNote}
 `.trim()

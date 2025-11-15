@@ -3,6 +3,7 @@ export interface Annotation {
   title?: string
   author?: string
   domain?: string
+  search_query?: string
 }
 
 export interface Note {

@@ -16,11 +16,12 @@ You think in multi-disciplinary analogies, finding provocative insights in the l
 const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
 Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
-Form your response as JSON with replies to each section of the essay {block_id: annotations}, where annotations is an array (1-3 in length) of {description, relevance, source, domain} (all fields are optional):
+Form your response as JSON with replies to each section of the essay {block_id: annotations}, where annotations is an array (1-3 in length) of {description, relevance, source, domain, search_query} (all fields are optional):
 - \`description\` is a short summary of the source (0-4 sentences)
 - \`relevance\` is why this source is relevant to the text block (0-4 sentences)
 - \`source\` is the name of the source (person name, book title, essay title, etc).
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
+- \`search_query\` is a search query that will be used by a search engine to find more information about the source
 `.trim();
 
 const model = 'moonshotai/Kimi-K2-Instruct-0905';

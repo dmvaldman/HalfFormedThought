@@ -358,6 +358,13 @@ button {
   margin-bottom: 4px;
 }
 
+.annotation-block-search-query {
+  font-size: 11px;
+  color: var(--medium-gray);
+  margin-bottom: 4px;
+  font-style: italic;
+}
+
 .annotation-block-domain {
   font-size: 11px;
   color: var(--light-gray);

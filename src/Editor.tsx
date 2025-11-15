@@ -260,7 +260,7 @@ class Editor extends Component<EditorProps, EditorState> {
    * Inserts an empty toggle block after the given block ID
    * Returns the ID of the inserted toggle block
    */
-  insertToggle(editor: BlockNoteEditor, afterBlockId: string): string | null {
+  insertToggle(editor: BlockNoteEditor, parentBlockId: string): string | null {
     if (!editor) return null
 
     const toggleBlock = {
@@ -270,11 +270,11 @@ class Editor extends Component<EditorProps, EditorState> {
       },
     } as any
 
-    editor.insertBlocks([toggleBlock], afterBlockId, 'after')
+    editor.insertBlocks([toggleBlock], parentBlockId, 'after')
 
     // Find the inserted toggle block
     const doc = editor.document as BaseBlock[]
-    const afterBlockIndex = doc.findIndex((b) => b.id === afterBlockId)
+    const afterBlockIndex = doc.findIndex((b) => b.id === parentBlockId)
     if (afterBlockIndex !== -1 && afterBlockIndex + 1 < doc.length) {
       const insertedToggleBlock = doc[afterBlockIndex + 1]
       if (insertedToggleBlock && insertedToggleBlock.type === 'toggle') {

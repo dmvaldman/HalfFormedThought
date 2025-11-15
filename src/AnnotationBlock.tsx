@@ -19,6 +19,13 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock,
   const isExpanded = (block.props as any)?.isExpanded || false
   const isFetching = (block.props as any)?.isFetching || false
 
+  // Console log search queries for debugging
+  annotations.forEach((annotation, index) => {
+    if (annotation.search_query) {
+      console.log(`Annotation ${index} search_query:`, annotation.search_query)
+    }
+  })
+
   const handleDelete = (index: number) => {
     const updatedAnnotations = annotations.filter((_, i) => i !== index)
     onUpdateBlock(block.id, {
@@ -102,6 +109,11 @@ const AnnotationBlock: React.FC<AnnotationBlockProps> = ({ block, onUpdateBlock,
                   <div className="annotation-block-source">
                     {annotation.title}
                     {annotation.author && `, ${annotation.author}`}
+                  </div>
+                )}
+                {annotation.search_query && (
+                  <div className="annotation-block-search-query">
+                    {annotation.search_query}
                   </div>
                 )}
                 {annotation.domain && (
