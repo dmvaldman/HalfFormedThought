@@ -6,7 +6,7 @@ export interface Annotation {
   search_query?: string
 }
 
-export interface Note {
+export interface NoteType {
   id: string
   title: string
   content: string // Plain text content

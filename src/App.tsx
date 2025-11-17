@@ -1,17 +1,17 @@
 import { Component } from 'react'
 import Sidebar from './Sidebar'
-import Editor from './Editor'
-import { Note } from './types'
+import Note from './Note'
+import { NoteType } from './types'
 import { loadNotes, saveNotes, generateId } from './storage'
 import { debounce } from './utils'
 
 interface AppState {
-  notes: Note[]
+  notes: NoteType[]
   currentNoteId: string | null
 }
 
 class App extends Component<{}, AppState> {
-  private debouncedSaveNotes: (notes: Note[]) => void
+  private debouncedSaveNotes: (notes: NoteType[]) => void
 
   constructor(props: {}) {
     super(props)
@@ -21,7 +21,7 @@ class App extends Component<{}, AppState> {
       currentNoteId: notes.length > 0 ? notes[0].id : null,
     }
     // Create debounced version of saveNotes
-    this.debouncedSaveNotes = debounce((notes: Note[]) => {
+    this.debouncedSaveNotes = debounce((notes: NoteType[]) => {
       saveNotes(notes)
     }, 500)
   }
@@ -32,7 +32,7 @@ class App extends Component<{}, AppState> {
 
   handleCreateNote = () => {
     const now = Date.now()
-    const newNote: Note = {
+    const newNote: NoteType = {
       id: generateId(),
       title: '',
       content: '',
@@ -85,7 +85,14 @@ class App extends Component<{}, AppState> {
           onCreateNote={this.handleCreateNote}
           onDeleteNote={this.handleDeleteNote}
         />
-        <Editor note={currentNote} onUpdateNote={this.handleUpdateNote} />
+        {currentNote && (
+          <Note key={currentNote.id} note={currentNote} onUpdate={this.handleUpdateNote} />
+        )}
+        {!currentNote && (
+          <div className="editor-empty">
+            <p>Select a note or create a new one</p>
+          </div>
+        )}
       </div>
     )
   }

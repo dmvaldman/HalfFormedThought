@@ -1,8 +1,8 @@
-import { Note } from './types'
+import { NoteType } from './types'
 
 const STORAGE_KEY = 'half-formed-thought-notes'
 
-function migrateNote(note: any): Note {
+function migrateNote(note: any): NoteType {
   // Migrate from BlockNote format (array of blocks) to plain text
   if (Array.isArray(note.content)) {
     // If content is an array (BlockNote format), convert to plain text
@@ -15,7 +15,7 @@ function migrateNote(note: any): Note {
   return note
 }
 
-export function loadNotes(): Note[] {
+export function loadNotes(): NoteType[] {
   const stored = localStorage.getItem(STORAGE_KEY)
   if (!stored) {
     return []
@@ -30,12 +30,10 @@ export function loadNotes(): Note[] {
   }
 }
 
-export function saveNotes(notes: Note[]): void {
+export function saveNotes(notes: NoteType[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
 }
 
 export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
-
-

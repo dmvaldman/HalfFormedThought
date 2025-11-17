@@ -1,54 +1,37 @@
 import React, { Component } from 'react'
-import { Note } from './types'
+import { NoteType } from './types'
 
-interface EditorProps {
-  note: Note | null
-  onUpdateNote: (noteId: string, title: string, content: string) => void
+interface NoteProps {
+  note: NoteType
+  onUpdate: (noteId: string, title: string, content: string) => void
 }
 
-class Editor extends Component<EditorProps> {
+class Note extends Component<NoteProps> {
   private contentEditableRef = React.createRef<HTMLDivElement>()
 
   componentDidMount() {
     // Set initial content when component mounts
-    if (this.contentEditableRef.current && this.props.note) {
-      this.contentEditableRef.current.textContent = this.props.note.content || ''
-    }
-  }
-
-  componentDidUpdate(prevProps: EditorProps) {
-    // Update content when note changes (but not when typing)
-    if (this.contentEditableRef.current && this.props.note && prevProps.note?.id !== this.props.note.id) {
+    if (this.contentEditableRef.current) {
       this.contentEditableRef.current.textContent = this.props.note.content || ''
     }
   }
 
   handleContentChange = () => {
-    if (!this.props.note || !this.contentEditableRef.current) return
+    if (!this.contentEditableRef.current) return
 
     const content = this.contentEditableRef.current.textContent || ''
     const title = this.props.note.title || ''
-    this.props.onUpdateNote(this.props.note.id, title, content)
+    this.props.onUpdate(this.props.note.id, title, content)
   }
 
   handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!this.props.note) return
-
     const title = e.target.value
     const content = this.contentEditableRef.current?.textContent || ''
-    this.props.onUpdateNote(this.props.note.id, title, content)
+    this.props.onUpdate(this.props.note.id, title, content)
   }
 
   render() {
     const { note } = this.props
-
-    if (!note) {
-      return (
-        <div className="editor-empty">
-          <p>Select a note or create a new one</p>
-        </div>
-      )
-    }
 
     return (
       <div className="editor">
@@ -71,5 +54,5 @@ class Editor extends Component<EditorProps> {
   }
 }
 
-export default Editor
+export default Note
 

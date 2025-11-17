@@ -1,8 +1,8 @@
 import { Component } from 'react'
-import { Note } from './types'
+import { NoteType } from './types'
 
 interface SidebarProps {
-  notes: Note[]
+  notes: NoteType[]
   currentNoteId: string | null
   onSelectNote: (noteId: string) => void
   onCreateNote: () => void
