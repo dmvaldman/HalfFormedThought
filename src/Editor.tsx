@@ -9,8 +9,15 @@ interface EditorProps {
 class Editor extends Component<EditorProps> {
   private contentEditableRef = React.createRef<HTMLDivElement>()
 
+  componentDidMount() {
+    // Set initial content when component mounts
+    if (this.contentEditableRef.current && this.props.note) {
+      this.contentEditableRef.current.textContent = this.props.note.content || ''
+    }
+  }
+
   componentDidUpdate(prevProps: EditorProps) {
-    // Update content when note changes
+    // Update content when note changes (but not when typing)
     if (this.contentEditableRef.current && this.props.note && prevProps.note?.id !== this.props.note.id) {
       this.contentEditableRef.current.textContent = this.props.note.content || ''
     }
@@ -58,9 +65,7 @@ class Editor extends Component<EditorProps> {
           contentEditable
           onInput={this.handleContentChange}
           suppressContentEditableWarning
-        >
-          {note.content}
-        </div>
+        />
       </div>
     )
   }
