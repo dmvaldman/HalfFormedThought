@@ -42,48 +42,8 @@ where annotations is an array (0-3 in length) of {description, title, author, do
 - \`search_query\` is a search query that will be used by a search engine to find more information about the source (optional)
 `.trim()
 
-// Conversation storage
+// Conversation storage key
 const STORAGE_KEY = 'half-formed-thought-conversations'
-let conversationsCache: Map<string, Message[]> | null = null
-
-function loadConversations(): Map<string, Message[]> {
-  if (conversationsCache) {
-    return conversationsCache
-  }
-
-  conversationsCache = new Map()
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored)
-      for (const [noteID, messages] of Object.entries(parsed)) {
-        conversationsCache.set(noteID, messages as Message[])
-      }
-    } catch (error) {
-      console.error('Error loading conversations:', error)
-    }
-  }
-  return conversationsCache
-}
-
-function saveConversations(): void {
-  if (!conversationsCache) return
-
-  try {
-    const obj: Record<string, Message[]> = {}
-    conversationsCache.forEach((messages, noteID) => {
-      obj[noteID] = messages
-    })
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(obj))
-  } catch (error) {
-    console.error('Error saving conversations:', error)
-  }
-}
-
-function getConversation(noteID: string): Message[] {
-  const conversations = loadConversations()
-  return conversations.get(noteID) || []
-}
 
 // Analyzer class
 export class Analyzer {
@@ -92,7 +52,33 @@ export class Analyzer {
 
   constructor(noteID: string) {
     this.noteID = noteID
-    this.conversation = getConversation(noteID)
+    this.conversation = this.loadConversation()
+  }
+
+  private loadConversation(): Message[] {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (!stored) {
+      return []
+    }
+
+    try {
+      const parsed = JSON.parse(stored)
+      return (parsed[this.noteID] as Message[]) || []
+    } catch (error) {
+      console.error('Error loading conversation:', error)
+      return []
+    }
+  }
+
+  private saveConversation(): void {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      const conversations: Record<string, Message[]> = stored ? JSON.parse(stored) : {}
+      conversations[this.noteID] = this.conversation
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
+    } catch (error) {
+      console.error('Error saving conversation:', error)
+    }
   }
 
   async analyze(initialContent: string, patch: string, getNoteContent?: () => string): Promise<void> {
@@ -135,10 +121,8 @@ export class Analyzer {
       const assistantMessage = JSON.stringify(response)
       this.conversation.push({ role: 'assistant', content: assistantMessage })
 
-      // Update cache and save
-      const conversations = loadConversations()
-      conversations.set(this.noteID, this.conversation)
-      saveConversations()
+      // Save conversation
+      this.saveConversation()
 
       console.log('Analysis complete:', response)
     } catch (error) {
@@ -149,8 +133,6 @@ export class Analyzer {
   }
 }
 
-// Initialize conversations cache on module load
-loadConversations()
 
 export async function analyzeNote(noteText: string, blockTexts: Array<{ id: string; text: string }>): Promise<Record<string, AnnotationType[]>> {
   // Format blocks with IDs for streaming response (still need IDs for response parsing)
