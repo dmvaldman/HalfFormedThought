@@ -2,6 +2,11 @@ import Together from "together-ai";
 import OpenAI from 'openai'
 import { AnnotationType } from './types'
 
+interface Message {
+  role: 'system' | 'user' | 'assistant'
+  content: string
+}
+
 const SYSTEM_PROMPT = `
 You are a brilliant lateral thinker. A student of history, science, mathematics, philosophy and art.
 You think in multi-disciplinary analogies, finding provocative insights in the long tail of human thought.
@@ -114,18 +119,18 @@ const openrouter = new OpenAI({
   }
 })
 
-async function callAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = false, schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
+async function callAPI(messages: Message[], onStreamChunk?: (buffer: string) => void, stream: boolean = false, schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
   if (API_PROVIDER === 'kimi') {
-    return callKimiAPI(userPrompt, onStreamChunk, stream)
+    return callKimiAPI(messages, onStreamChunk, stream)
   } else if (API_PROVIDER === 'openrouter') {
-    return callOpenRouterAPI(userPrompt, onStreamChunk, stream, schemaType, useStructuredOutput)
+    return callOpenRouterAPI(messages, onStreamChunk, stream, schemaType, useStructuredOutput)
   } else {
-    return callTogetherAPI(userPrompt, onStreamChunk, stream, schemaType)
+    return callTogetherAPI(messages, onStreamChunk, stream, schemaType)
   }
 }
 
-async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations') {
-  console.log('userPrompt\n\n', userPrompt)
+async function callTogetherAPI(messages: Message[], onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations') {
+  console.log('Messages:\n\n', messages)
 
   // Select the appropriate schema based on schemaType
   const schema = schemaType === 'annotations' ? ANNOTATIONS_SCHEMA : LIST_ITEMS_SCHEMA
@@ -133,10 +138,7 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
   if (stream) {
     const streamResponse = await together.chat.completions.create({
       model: MODEL_NAMES.together,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt }
-      ],
+      messages: messages,
       temperature: temperature,
       response_format: { type: 'json_schema', schema },
       reasoning_effort: "high",
@@ -161,10 +163,7 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
   } else {
     const response = await together.chat.completions.create({
       model: MODEL_NAMES.together,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt }
-      ],
+      messages: messages,
       temperature: temperature,
       response_format: { type: 'json_schema', schema },
       reasoning_effort: "high",
@@ -176,14 +175,11 @@ async function callTogetherAPI(userPrompt: string, onStreamChunk?: (buffer: stri
   }
 }
 
-async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true) {
+async function callKimiAPI(messages: Message[], onStreamChunk?: (buffer: string) => void, stream: boolean = true) {
   if (stream) {
     const streamResponse = await kimi.chat.completions.create({
       model: MODEL_NAMES.kimi,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt }
-      ],
+      messages: messages,
       temperature: temperature,
       response_format: { type: 'json_object' },
       stream: true
@@ -207,10 +203,7 @@ async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) 
   } else {
     const response = await kimi.chat.completions.create({
       model: MODEL_NAMES.kimi,
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt }
-      ],
+      messages: messages,
       temperature: temperature,
       response_format: { type: 'json_object' },
       stream: false
@@ -221,8 +214,8 @@ async function callKimiAPI(userPrompt: string, onStreamChunk?: (buffer: string) 
   }
 }
 
-async function callOpenRouterAPI(userPrompt: string, onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
-  console.log('userPrompt\n\n', userPrompt)
+async function callOpenRouterAPI(messages: Message[], onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
+  console.log('Messages:\n\n', messages)
 
   // Select the appropriate schema based on schemaType
   const responseFormat = useStructuredOutput
@@ -234,10 +227,7 @@ async function callOpenRouterAPI(userPrompt: string, onStreamChunk?: (buffer: st
   // OpenRouter-specific body options
   const requestOptions: any = {
     model: MODEL_NAMES.openrouter,
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userPrompt }
-    ],
+    messages: messages,
     temperature: temperature,
     response_format: responseFormat,
     stream,
@@ -350,6 +340,111 @@ function tryExtractCompleteBlock(
   return null
 }
 
+// Conversation storage
+const STORAGE_KEY = 'half-formed-thought-conversations'
+let conversationsCache: Map<string, Message[]> | null = null
+
+function loadConversations(): Map<string, Message[]> {
+  if (conversationsCache) {
+    return conversationsCache
+  }
+
+  conversationsCache = new Map()
+  const stored = localStorage.getItem(STORAGE_KEY)
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored)
+      for (const [noteID, messages] of Object.entries(parsed)) {
+        conversationsCache.set(noteID, messages as Message[])
+      }
+    } catch (error) {
+      console.error('Error loading conversations:', error)
+    }
+  }
+  return conversationsCache
+}
+
+function saveConversations(): void {
+  if (!conversationsCache) return
+
+  try {
+    const obj: Record<string, Message[]> = {}
+    conversationsCache.forEach((messages, noteID) => {
+      obj[noteID] = messages
+    })
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(obj))
+  } catch (error) {
+    console.error('Error saving conversations:', error)
+  }
+}
+
+function getConversation(noteID: string): Message[] {
+  const conversations = loadConversations()
+  return conversations.get(noteID) || []
+}
+
+// Analyzer class
+export class Analyzer {
+  private noteID: string
+  private conversation: Message[]
+
+  constructor(noteID: string) {
+    this.noteID = noteID
+    this.conversation = getConversation(noteID)
+  }
+
+  async analyze(initialContent: string, patch: string, getNoteContent?: () => string): Promise<void> {
+    // Skip if patch is empty or only contains headers
+    const patchLines = patch.split('\n').filter(line => line.trim() !== '')
+    if (patchLines.length <= 2) { // Just headers, no actual changes
+      return
+    }
+
+    let newUserMessage: string
+
+    // If this is a new conversation, create first message with preamble + full content
+    if (this.conversation.length === 0) {
+      const fullContent = getNoteContent ? getNoteContent() : initialContent
+      newUserMessage = `${USER_PROMPT_PREAMBLE}\n\n${fullContent}`
+    } else {
+      // Otherwise, just use the patch
+      newUserMessage = patch
+    }
+
+    // Add user message to conversation
+    this.conversation.push({ role: 'user', content: newUserMessage })
+
+    // Build messages array for API call
+    const messages: Message[] = [
+      { role: 'system', content: SYSTEM_PROMPT },
+      ...this.conversation
+    ]
+
+    try {
+      // Call API with conversation history
+      const response = await callAPI(messages, undefined, false, 'annotations')
+
+      // Add assistant response to conversation
+      const assistantMessage = JSON.stringify(response)
+      this.conversation.push({ role: 'assistant', content: assistantMessage })
+
+      // Update cache and save
+      const conversations = loadConversations()
+      conversations.set(this.noteID, this.conversation)
+      saveConversations()
+
+      console.log('Analysis complete:', response)
+    } catch (error) {
+      console.error('Error analyzing content:', error)
+      // Remove the user message if API call failed
+      this.conversation.pop()
+    }
+  }
+}
+
+// Initialize conversations cache on module load
+loadConversations()
+
 export async function analyzeNote(noteText: string, blockTexts: Array<{ id: string; text: string }>): Promise<Record<string, AnnotationType[]>> {
   // Format blocks with IDs for streaming response (still need IDs for response parsing)
   const blocksText = blockTexts
@@ -366,7 +461,11 @@ export async function analyzeNote(noteText: string, blockTexts: Array<{ id: stri
   const completedBlocks = new Set<string>()
   const parsedBlocks: Record<string, AnnotationType[]> = {}
 
-  const parsed = await callAPI(userPrompt, (currentBuffer) => {
+  const messages: Message[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: userPrompt }
+  ]
+  const parsed = await callAPI(messages, (currentBuffer) => {
     const completedBlock = tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks)
 
     if (completedBlock) {
@@ -424,7 +523,11 @@ Form your response as JSON {annotations: [annotation,...]} where annotations is 
 You MUST provide at least one annotation.${existingSourcesNote}
 `.trim()
 
-  const parsed = await callAPI(userPrompt, undefined, false)
+  const messages: Message[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: userPrompt }
+  ]
+  const parsed = await callAPI(messages, undefined, false)
 
   console.log('Response:', parsed.annotations)
 

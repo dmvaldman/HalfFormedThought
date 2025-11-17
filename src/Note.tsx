@@ -2,6 +2,7 @@ import React, { Component } from 'react'
 import { NoteType } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
+import { Analyzer } from './analyzer'
 
 interface NoteProps {
   note: NoteType
@@ -13,48 +14,67 @@ class Note extends Component<NoteProps> {
   private contentEditableRef = React.createRef<HTMLDivElement>()
   private initialContent: string = ''
   private debouncedContentLogger: () => void
+  private analyzer: Analyzer
 
   constructor(props: NoteProps) {
     super(props)
-    // Create debounced function that logs the final content after 5 seconds of inactivity
+    // Initialize analyzer for this note
+    this.analyzer = new Analyzer(props.note.id)
+
+    // Create debounced version of contentLogger
     this.debouncedContentLogger = debounce(() => {
-      if (this.contentEditableRef.current) {
-        console.log('Pause detected')
-        const currentContent = this.contentEditableRef.current.innerText || ''
-        if (currentContent !== this.initialContent) {
-          // Create a readable diff with context lines
-          const patch = createPatch(
-            'content',
-            this.initialContent,
-            currentContent,
-            'Original',
-            'Current',
-            { context: 2 } // Number of context lines before/after changes
-          )
-
-          // Remove "No newline at end of file" messages and empty lines
-          const cleanedPatch = patch
-            .split('\n')
-            .filter(line => {
-              const trimmed = line.trim()
-              // Remove empty lines, "No newline" messages, and lines that are just "+" or "-" with no content
-              return trimmed !== '' &&
-                     !trimmed.includes('\\ No newline at end of file') &&
-                     !(trimmed === '+' || trimmed === '-')
-            })
-            .join('\n')
-
-          console.log('\n=== Content Diff ===')
-          console.log(cleanedPatch)
-          console.log('===================\n')
-
-          this.initialContent = currentContent
-        }
-        else {
-          console.log('No change in content')
-        }
-      }
+      this.contentLogger()
     }, 2000)
+  }
+
+  getContent(): string {
+    return this.contentEditableRef.current?.innerText || ''
+  }
+
+  private contentLogger = () => {
+    if (!this.contentEditableRef.current) return
+
+    console.log('Pause detected')
+    const currentContent = this.getContent()
+    if (currentContent !== this.initialContent) {
+      // Create a readable diff with context lines
+      const patch = createPatch(
+        'content',
+        this.initialContent,
+        currentContent,
+        'Original',
+        'Current',
+        { context: 2 } // Number of context lines before/after changes
+      )
+
+      // Remove "No newline at end of file" messages and empty lines
+      const cleanedPatch = patch
+        .split('\n')
+        .filter(line => {
+          const trimmed = line.trim()
+          // Remove empty lines, "No newline" messages, and lines that are just "+" or "-" with no content
+          return trimmed !== '' &&
+                 !trimmed.includes('\\ No newline at end of file') &&
+                 !(trimmed === '+' || trimmed === '-')
+        })
+        .join('\n')
+
+      console.log('\n=== Content Diff ===')
+      console.log(cleanedPatch)
+      console.log('===================\n')
+
+      // Analyze the content change
+      this.analyzer.analyze(
+        this.initialContent,
+        cleanedPatch,
+        this.getContent.bind(this)
+      )
+
+      this.initialContent = currentContent
+    }
+    else {
+      console.log('No change in content')
+    }
   }
 
   componentDidMount() {
@@ -69,9 +89,9 @@ class Note extends Component<NoteProps> {
   handleContentChange = () => {
     if (!this.contentEditableRef.current) return
 
-    const content = this.contentEditableRef.current.innerText || ''
+    const content = this.getContent()
 
-    // Call the debounced logger (will log after 5 seconds of inactivity)
+    // Call the debounced logger (will log after 2 seconds of inactivity)
     this.debouncedContentLogger()
 
     // Still update immediately (for saving)
