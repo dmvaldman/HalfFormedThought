@@ -1,7 +1,7 @@
 import React, { Component } from 'react'
 import { NoteType } from './types'
 import { debounce } from './utils'
-import { diffLines, Change } from 'diff'
+import { createPatch } from 'diff'
 
 interface NoteProps {
   note: NoteType
@@ -22,21 +22,30 @@ class Note extends Component<NoteProps> {
         console.log('Pause detected')
         const currentContent = this.contentEditableRef.current.innerText || ''
         if (currentContent !== this.initialContent) {
-          // Create a readable diff
-          const changes: Change[] = diffLines(this.initialContent, currentContent)
+          // Create a readable diff with context lines
+          const patch = createPatch(
+            'content',
+            this.initialContent,
+            currentContent,
+            'Original',
+            'Current',
+            { context: 2 } // Number of context lines before/after changes
+          )
+
+          // Remove "No newline at end of file" messages and empty lines
+          const cleanedPatch = patch
+            .split('\n')
+            .filter(line => {
+              const trimmed = line.trim()
+              // Remove empty lines, "No newline" messages, and lines that are just "+" or "-" with no content
+              return trimmed !== '' &&
+                     !trimmed.includes('\\ No newline at end of file') &&
+                     !(trimmed === '+' || trimmed === '-')
+            })
+            .join('\n')
 
           console.log('\n=== Content Diff ===')
-          debugger;
-          changes.forEach((part: Change) => {
-            if (part.added) {
-              console.log(`+ ${part.value}`)
-            } else if (part.removed) {
-              console.log(`- ${part.value}`)
-            } else {
-              // Unchanged parts - you can log them or skip for cleaner output
-              // console.log(`  ${part.value}`)
-            }
-          })
+          console.log(cleanedPatch)
           console.log('===================\n')
 
           this.initialContent = currentContent

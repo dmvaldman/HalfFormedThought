@@ -5,8 +5,13 @@ declare module 'diff' {
     removed?: boolean
   }
 
+  export interface PatchOptions {
+    context?: number
+  }
+
   export function diffWords(oldStr: string, newStr: string): Change[]
   export function diffLines(oldStr: string, newStr: string): Change[]
   export function diffChars(oldStr: string, newStr: string): Change[]
+  export function createPatch(fileName: string, oldStr: string, newStr: string, oldHeader?: string, newHeader?: string, options?: PatchOptions): string
 }
 
