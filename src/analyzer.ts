@@ -1,6 +1,6 @@
 import Together from "together-ai";
 import OpenAI from 'openai'
-import { Annotation } from './types'
+import { AnnotationType } from './types'
 
 const SYSTEM_PROMPT = `
 You are a brilliant lateral thinker. A student of history, science, mathematics, philosophy and art.
@@ -350,7 +350,7 @@ function tryExtractCompleteBlock(
   return null
 }
 
-export async function analyzeNote(noteText: string, blockTexts: Array<{ id: string; text: string }>): Promise<Record<string, Annotation[]>> {
+export async function analyzeNote(noteText: string, blockTexts: Array<{ id: string; text: string }>): Promise<Record<string, AnnotationType[]>> {
   // Format blocks with IDs for streaming response (still need IDs for response parsing)
   const blocksText = blockTexts
     .map(block => {
@@ -364,7 +364,7 @@ export async function analyzeNote(noteText: string, blockTexts: Array<{ id: stri
 
   const blockIds = blockTexts.map(b => b.id)
   const completedBlocks = new Set<string>()
-  const parsedBlocks: Record<string, Annotation[]> = {}
+  const parsedBlocks: Record<string, AnnotationType[]> = {}
 
   const parsed = await callAPI(userPrompt, (currentBuffer) => {
     const completedBlock = tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks)
@@ -381,7 +381,7 @@ export async function analyzeNote(noteText: string, blockTexts: Array<{ id: stri
   }
 
   // Convert full response to our format
-  const result: Record<string, Annotation[]> = {}
+  const result: Record<string, AnnotationType[]> = {}
   for (const [blockId, annotations] of Object.entries(parsed)) {
     result[blockId] = (annotations as any[]) || []
   }
@@ -391,8 +391,8 @@ export async function analyzeNote(noteText: string, blockTexts: Array<{ id: stri
 export async function analyzeBlock(
   fullNoteText: string,
   currentBlockText: string,
-  existingAnnotations: Annotation[] = []
-): Promise<Annotation[]> {
+  existingAnnotations: AnnotationType[] = []
+): Promise<AnnotationType[]> {
   let existingSourcesNote = ''
   if (existingAnnotations && existingAnnotations.length > 0) {
     const titles = existingAnnotations
@@ -435,12 +435,12 @@ You MUST provide at least one annotation.${existingSourcesNote}
 
   // If it's already an array, return it
   if (Array.isArray(parsed.annotations)) {
-    return parsed.annotations as Annotation[]
+    return parsed.annotations as AnnotationType[]
   }
 
   // If it's an object, try to convert it to an array
   if (typeof parsed.annotations === 'object') {
-    return [parsed.annotations] as Annotation[]
+    return [parsed.annotations] as AnnotationType[]
   }
 
   // Fallback to empty array

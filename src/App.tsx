@@ -62,10 +62,20 @@ class App extends Component<{}, AppState> {
     saveNotes(updatedNotes)
   }
 
-  handleUpdateNote = (noteId: string, title: string, content: string) => {
+  handleUpdateTitle = (noteId: string, title: string) => {
     const updatedNotes = this.state.notes.map((note) =>
       note.id === noteId
-        ? { ...note, title, content, updatedAt: Date.now() }
+        ? { ...note, title, updatedAt: Date.now() }
+        : note
+    )
+    this.setState({ notes: updatedNotes })
+    this.debouncedSaveNotes(updatedNotes)
+  }
+
+  handleUpdateContent = (noteId: string, content: string) => {
+    const updatedNotes = this.state.notes.map((note) =>
+      note.id === noteId
+        ? { ...note, content, updatedAt: Date.now() }
         : note
     )
     this.setState({ notes: updatedNotes })
@@ -86,7 +96,12 @@ class App extends Component<{}, AppState> {
           onDeleteNote={this.handleDeleteNote}
         />
         {currentNote && (
-          <Note key={currentNote.id} note={currentNote} onUpdate={this.handleUpdateNote} />
+          <Note
+            key={currentNote.id}
+            note={currentNote}
+            onUpdateTitle={this.handleUpdateTitle}
+            onUpdateContent={this.handleUpdateContent}
+          />
         )}
         {!currentNote && (
           <div className="editor-empty">

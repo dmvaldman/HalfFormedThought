@@ -1,4 +1,4 @@
-export interface Annotation {
+export interface AnnotationType {
   description?: string
   title?: string
   author?: string
