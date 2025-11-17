@@ -1,6 +1,7 @@
 import React, { Component } from 'react'
 import { NoteType } from './types'
 import { debounce } from './utils'
+import { diffLines, Change } from 'diff'
 
 interface NoteProps {
   note: NoteType
@@ -18,22 +19,40 @@ class Note extends Component<NoteProps> {
     // Create debounced function that logs the final content after 5 seconds of inactivity
     this.debouncedContentLogger = debounce(() => {
       if (this.contentEditableRef.current) {
-        const currentContent = this.contentEditableRef.current.textContent || ''
-        // Only log if content has changed from initial
+        console.log('Pause detected')
+        const currentContent = this.contentEditableRef.current.innerText || ''
         if (currentContent !== this.initialContent) {
-          console.log('Content after 5 seconds:', currentContent)
-          // Update initial content to current so we don't log again unless it changes
+          // Create a readable diff
+          const changes: Change[] = diffLines(this.initialContent, currentContent)
+
+          console.log('\n=== Content Diff ===')
+          debugger;
+          changes.forEach((part: Change) => {
+            if (part.added) {
+              console.log(`+ ${part.value}`)
+            } else if (part.removed) {
+              console.log(`- ${part.value}`)
+            } else {
+              // Unchanged parts - you can log them or skip for cleaner output
+              // console.log(`  ${part.value}`)
+            }
+          })
+          console.log('===================\n')
+
           this.initialContent = currentContent
         }
+        else {
+          console.log('No change in content')
+        }
       }
-    }, 5000)
+    }, 2000)
   }
 
   componentDidMount() {
     // Set initial content when component mounts
     if (this.contentEditableRef.current) {
       const initial = this.props.note.content || ''
-      this.contentEditableRef.current.textContent = initial
+      this.contentEditableRef.current.innerText = initial
       this.initialContent = initial
     }
   }
@@ -41,7 +60,7 @@ class Note extends Component<NoteProps> {
   handleContentChange = () => {
     if (!this.contentEditableRef.current) return
 
-    const content = this.contentEditableRef.current.textContent || ''
+    const content = this.contentEditableRef.current.innerText || ''
 
     // Call the debounced logger (will log after 5 seconds of inactivity)
     this.debouncedContentLogger()
@@ -53,6 +72,11 @@ class Note extends Component<NoteProps> {
   handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const title = e.target.value
     this.props.onUpdateTitle(this.props.note.id, title)
+  }
+
+  handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
+    const pastedText = e.clipboardData.getData('text/plain')
+    console.log('Pasted content:', pastedText)
   }
 
   render() {
@@ -72,6 +96,7 @@ class Note extends Component<NoteProps> {
           className="editor-content"
           contentEditable
           onInput={this.handleContentChange}
+          onPaste={this.handlePaste}
           suppressContentEditableWarning
         />
       </div>
