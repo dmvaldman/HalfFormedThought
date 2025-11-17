@@ -119,102 +119,49 @@ const openrouter = new OpenAI({
   }
 })
 
-async function callAPI(messages: Message[], onStreamChunk?: (buffer: string) => void, stream: boolean = false, schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
+async function callAPI(messages: Message[], schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
   if (API_PROVIDER === 'kimi') {
-    return callKimiAPI(messages, onStreamChunk, stream)
+    return callKimiAPI(messages)
   } else if (API_PROVIDER === 'openrouter') {
-    return callOpenRouterAPI(messages, onStreamChunk, stream, schemaType, useStructuredOutput)
+    return callOpenRouterAPI(messages, schemaType, useStructuredOutput)
   } else {
-    return callTogetherAPI(messages, onStreamChunk, stream, schemaType)
+    return callTogetherAPI(messages, schemaType)
   }
 }
 
-async function callTogetherAPI(messages: Message[], onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations') {
+async function callTogetherAPI(messages: Message[], schemaType: 'annotations' | 'list_items' = 'annotations') {
   console.log('Messages:\n\n', messages)
 
   // Select the appropriate schema based on schemaType
   const schema = schemaType === 'annotations' ? ANNOTATIONS_SCHEMA : LIST_ITEMS_SCHEMA
 
-  if (stream) {
-    const streamResponse = await together.chat.completions.create({
-      model: MODEL_NAMES.together,
-      messages: messages,
-      temperature: temperature,
-      response_format: { type: 'json_schema', schema },
-      reasoning_effort: "high",
-      stream: true
-    })
+  const response = await together.chat.completions.create({
+    model: MODEL_NAMES.together,
+    messages: messages,
+    temperature: temperature,
+    response_format: { type: 'json_schema' as const, schema },
+    reasoning_effort: "high",
+    stream: false
+  })
 
-    let fullResponse = ''
-    let currentBuffer = ''
-
-    for await (const chunk of streamResponse) {
-      const content = chunk.choices[0]?.delta?.content || ''
-      if (content) {
-        fullResponse += content
-        currentBuffer += content
-        if (onStreamChunk) {
-          onStreamChunk(currentBuffer)
-        }
-      }
-    }
-
-    return parseResponse(fullResponse)
-  } else {
-    const response = await together.chat.completions.create({
-      model: MODEL_NAMES.together,
-      messages: messages,
-      temperature: temperature,
-      response_format: { type: 'json_schema', schema },
-      reasoning_effort: "high",
-      stream: false
-    })
-
-    const fullResponse = response.choices[0]?.message?.content || ''
-    return parseResponse(fullResponse)
-  }
+  const fullResponse = response.choices[0]?.message?.content || ''
+  return parseResponse(fullResponse)
 }
 
-async function callKimiAPI(messages: Message[], onStreamChunk?: (buffer: string) => void, stream: boolean = true) {
-  if (stream) {
-    const streamResponse = await kimi.chat.completions.create({
-      model: MODEL_NAMES.kimi,
-      messages: messages,
-      temperature: temperature,
-      response_format: { type: 'json_object' },
-      stream: true
-    })
+async function callKimiAPI(messages: Message[]) {
+  const response = await kimi.chat.completions.create({
+    model: MODEL_NAMES.kimi,
+    messages: messages,
+    temperature: temperature,
+    response_format: { type: 'json_object' },
+    stream: false
+  })
 
-    let fullResponse = ''
-    let currentBuffer = ''
-
-    for await (const chunk of streamResponse) {
-      const content = chunk.choices[0]?.delta?.content || ''
-      if (content) {
-        fullResponse += content
-        currentBuffer += content
-        if (onStreamChunk) {
-          onStreamChunk(currentBuffer)
-        }
-      }
-    }
-
-    return parseResponse(fullResponse)
-  } else {
-    const response = await kimi.chat.completions.create({
-      model: MODEL_NAMES.kimi,
-      messages: messages,
-      temperature: temperature,
-      response_format: { type: 'json_object' },
-      stream: false
-    })
-
-    const fullResponse = response.choices[0]?.message?.content || ''
-    return parseResponse(fullResponse)
-  }
+  const fullResponse = response.choices[0]?.message?.content || ''
+  return parseResponse(fullResponse)
 }
 
-async function callOpenRouterAPI(messages: Message[], onStreamChunk?: (buffer: string) => void, stream: boolean = true, schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
+async function callOpenRouterAPI(messages: Message[], schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
   console.log('Messages:\n\n', messages)
 
   // Select the appropriate schema based on schemaType
@@ -222,49 +169,18 @@ async function callOpenRouterAPI(messages: Message[], onStreamChunk?: (buffer: s
     ? (schemaType === 'annotations'
       ? OPENROUTER_ANNOTATIONS_SCHEMA
       : OPENROUTER_LIST_ITEMS_SCHEMA)
-    : { type: 'json_object' }
+    : { type: 'json_object' as const }
 
-  // OpenRouter-specific body options
-  const requestOptions: any = {
+  const response = await openrouter.chat.completions.create({
     model: MODEL_NAMES.openrouter,
     messages: messages,
     temperature: temperature,
-    response_format: responseFormat,
-    stream,
-    provider: {
-      sort: 'throughput'
-    }
-  }
+    response_format: responseFormat as any,
+    stream: false
+  } as any)
 
-  if (stream) {
-    const streamResponse = await openrouter.chat.completions.create({
-      ...requestOptions,
-      stream: true
-    })
-
-    let fullResponse = ''
-    let currentBuffer = ''
-
-    for await (const chunk of streamResponse as any) {
-      const content = chunk.choices[0]?.delta?.content || ''
-      if (content) {
-        fullResponse += content
-        currentBuffer += content
-        if (onStreamChunk) {
-          onStreamChunk(currentBuffer)
-        }
-      }
-    }
-
-    return parseResponse(fullResponse)
-  } else {
-    const response = await openrouter.chat.completions.create({
-      ...requestOptions,
-      stream: false
-    })
-    const fullResponse = response.choices[0]?.message?.content || ''
-    return parseResponse(fullResponse)
-  }
+  const fullResponse = response.choices[0]?.message?.content || ''
+  return parseResponse(fullResponse)
 }
 
 async function parseResponse(fullResponse: string) {
@@ -293,51 +209,6 @@ async function parseResponse(fullResponse: string) {
       throw parseError
     }
   }
-}
-
-function tryExtractCompleteBlock(
-  currentBuffer: string,
-  blockIds: string[],
-  completedBlocks: Set<string>
-): { blockId: string; parsed: any } | null {
-  for (let i = 0; i < blockIds.length; i++) {
-    const blockId = blockIds[i]
-    if (completedBlocks.has(blockId)) continue
-
-    const escapedBlockId = blockId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const blockPattern = new RegExp(`"\\s*${escapedBlockId}"\\s*:`)
-    const startMatch = currentBuffer.match(blockPattern)
-
-    if (!startMatch) continue
-
-    const startIndex = startMatch.index! + startMatch[0].length
-    const nextBlockId = blockIds[i + 1]
-
-    let endIndex = currentBuffer.length
-    if (nextBlockId) {
-      const escapedNextBlockId = nextBlockId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const nextPattern = new RegExp(`"\\s*${escapedNextBlockId}"\\s*:`)
-      const nextMatch = currentBuffer.match(nextPattern)
-      if (nextMatch) {
-        endIndex = nextMatch.index!
-      }
-    }
-
-    const blockContent = currentBuffer.substring(startIndex, endIndex).trim()
-
-    if (blockContent && (blockContent.endsWith(']') || blockContent.endsWith('],'))) {
-      try {
-        const blockEntry = `{"${blockId}":${blockContent.replace(/,$/, '')}}`
-        // Try to parse directly first
-        const parsed = JSON.parse(blockEntry)
-        return { blockId, parsed }
-      } catch (e) {
-        // Not parseable yet, might be incomplete
-      }
-    }
-  }
-
-  return null
 }
 
 // Conversation storage
@@ -422,7 +293,7 @@ export class Analyzer {
 
     try {
       // Call API with conversation history
-      const response = await callAPI(messages, undefined, false, 'annotations')
+      const response = await callAPI(messages, 'annotations')
 
       // Add assistant response to conversation
       const assistantMessage = JSON.stringify(response)
@@ -457,27 +328,11 @@ export async function analyzeNote(noteText: string, blockTexts: Array<{ id: stri
   // Use full note text in preamble, then blocks with IDs
   const userPrompt = `${USER_PROMPT_PREAMBLE}\n\n${noteText}\n\n---\n\nBlocks to analyze:\n\n${blocksText}`
 
-  const blockIds = blockTexts.map(b => b.id)
-  const completedBlocks = new Set<string>()
-  const parsedBlocks: Record<string, AnnotationType[]> = {}
-
   const messages: Message[] = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: userPrompt }
   ]
-  const parsed = await callAPI(messages, (currentBuffer) => {
-    const completedBlock = tryExtractCompleteBlock(currentBuffer, blockIds, completedBlocks)
-
-    if (completedBlock) {
-      completedBlocks.add(completedBlock.blockId)
-      parsedBlocks[completedBlock.blockId] = completedBlock.parsed[completedBlock.blockId] || []
-    }
-  }, true)
-
-  // Return parsed blocks from streaming, or fallback to full parsed response
-  if (Object.keys(parsedBlocks).length > 0) {
-    return parsedBlocks
-  }
+  const parsed = await callAPI(messages, 'annotations')
 
   // Convert full response to our format
   const result: Record<string, AnnotationType[]> = {}
@@ -527,7 +382,7 @@ You MUST provide at least one annotation.${existingSourcesNote}
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: userPrompt }
   ]
-  const parsed = await callAPI(messages, undefined, false)
+  const parsed = await callAPI(messages, 'annotations')
 
   console.log('Response:', parsed.annotations)
 
