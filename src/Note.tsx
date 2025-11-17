@@ -22,53 +22,54 @@ class Note extends Component<NoteProps> {
     this.analyzer = new Analyzer(props.note.id)
 
     // Create debounced version of contentLogger
-    this.debouncedContentLogger = debounce(() => {
-      this.contentLogger()
-    }, 2000)
+    this.debouncedContentLogger = debounce(this.contentLogger.bind(this), 2000)
   }
 
   getContent(): string {
     return this.contentEditableRef.current?.innerText || ''
   }
 
+  private getDiff(initialContent: string, currentContent: string): string {
+    // Create a readable diff with context lines
+    const patch = createPatch(
+      'content',
+      initialContent,
+      currentContent,
+      'Original',
+      'Current',
+      { context: 2 } // Number of context lines before/after changes
+    )
+
+    // Remove "No newline at end of file" messages and empty lines
+    const cleanedPatch = patch
+      .split('\n')
+      .filter(line => {
+        const trimmed = line.trim()
+        // Remove empty lines, "No newline" messages, and lines that are just "+" or "-" with no content
+        return trimmed !== '' &&
+               !trimmed.includes('\\ No newline at end of file') &&
+               !(trimmed === '+' || trimmed === '-')
+      })
+      .join('\n')
+
+    return cleanedPatch
+  }
+
   private contentLogger = () => {
     if (!this.contentEditableRef.current) return
 
     console.log('Pause detected')
+
     const currentContent = this.getContent()
     if (currentContent !== this.initialContent) {
-      // Create a readable diff with context lines
-      const patch = createPatch(
-        'content',
-        this.initialContent,
-        currentContent,
-        'Original',
-        'Current',
-        { context: 2 } // Number of context lines before/after changes
-      )
-
-      // Remove "No newline at end of file" messages and empty lines
-      const cleanedPatch = patch
-        .split('\n')
-        .filter(line => {
-          const trimmed = line.trim()
-          // Remove empty lines, "No newline" messages, and lines that are just "+" or "-" with no content
-          return trimmed !== '' &&
-                 !trimmed.includes('\\ No newline at end of file') &&
-                 !(trimmed === '+' || trimmed === '-')
-        })
-        .join('\n')
+      const diff = this.getDiff(this.initialContent, currentContent)
 
       console.log('\n=== Content Diff ===')
-      console.log(cleanedPatch)
+      console.log(diff)
       console.log('===================\n')
 
       // Analyze the content change
-      this.analyzer.analyze(
-        this.initialContent,
-        cleanedPatch,
-        this.getContent.bind(this)
-      )
+      this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this))
 
       this.initialContent = currentContent
     }
