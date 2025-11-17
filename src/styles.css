@@ -45,15 +45,6 @@ button {
   height: 100vh;
 }
 
-/* BlockNote styling overrides */
-.bn-editor {
-  background: transparent;
-}
-
-/* Remove outline on selected annotation blocks */
-.ProseMirror-selectednode > .bn-block-content > * {
-  outline: none !important;
-}
 
 .app {
   display: flex;
@@ -177,16 +168,7 @@ button {
   font-size: 16px;
 }
 
-.note-title-container {
-  padding: 16px 32px 22px;
-  border-bottom: 1px solid var(--dark-gray);
-  display: flex;
-  align-items: flex-start;
-  gap: 16px;
-}
-
 .note-title-input {
-  flex: 1;
   background: transparent;
   border: none;
   color: var(--white-pure);
@@ -196,38 +178,13 @@ button {
   resize: none;
   outline: none;
   line-height: 1.4;
-  min-height: 44px;
-  overflow: hidden;
+  padding: 16px 32px;
+  border-bottom: 1px solid var(--dark-gray);
+  width: 100%;
 }
 
 .note-title-input::placeholder {
   color: var(--medium-gray);
-}
-
-.analyze-button {
-  background: var(--black);
-  border: 1px solid var(--dark-gray);
-  color: var(--white-pure);
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  margin-top: 4px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.analyze-button:hover:not(:disabled) {
-  background: var(--dark-gray);
-  border-color: var(--medium-gray);
-}
-
-.analyze-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
 }
 
 .note-content-container {
@@ -256,281 +213,32 @@ button {
   background: var(--medium-gray);
 }
 
-/* Annotation Block (BlockNote) */
-.annotation-block {
-  width: 100%;
-  margin: 8px 0;
-  border: 1px solid var(--dark-gray);
-  border-radius: 4px;
-  background-color: var(--black);
-}
-
-/* Disable drag on annotation block content to allow text selection */
-.annotation-block-content {
-  -webkit-user-drag: none;
-  pointer-events: auto;
-}
-
-.annotation-block-content * {
-  -webkit-user-drag: none;
-  user-select: text;
-  -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
-}
-
-.annotation-block-header {
-  padding: 8px 12px;
-  cursor: pointer;
+/* Editor */
+.editor {
+  flex: 1;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  user-select: none;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.annotation-block-header-text {
-  color: var(--light-gray);
-  font-size: 12px;
-}
-
-.annotation-block-content {
-  padding: 12px;
-  border-top: 1px solid var(--dark-gray);
-  overflow-x: auto;
-  overflow-y: hidden;
-}
-
-.annotation-block-list {
-  display: flex;
-  gap: 12px;
-  min-width: max-content;
-}
-
-.annotation-block-card {
-  position: relative;
-  min-width: 200px;
-  max-width: 350px;
-  padding: 12px;
-  background-color: var(--black);
-  border-radius: 4px;
-  border: 1px solid var(--dark-gray);
-  user-select: text;
-  -webkit-user-select: text;
-  -moz-user-select: text;
-  -ms-user-select: text;
-  cursor: text;
-  /* Prevent drag on the card content */
-  -webkit-user-drag: none;
-}
-
-/* Shared delete button styles */
-.delete-btn {
-  display: none;
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background: var(--black);
-  border: none;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  color: var(--white-pure);
-  font-size: 16px;
-  line-height: 1;
-  padding: 0;
-}
-
-.delete-btn:hover {
-  background: var(--dark-gray);
-}
-
-.annotation-block-card:hover .delete-btn,
-.list-block-item:hover .delete-btn {
-  display: block;
-}
-
-.annotation-block-source {
-  font-size: 12px;
-  font-weight: bold;
-  color: var(--accent-cyan);
-  margin-bottom: 4px;
-}
-
-.annotation-block-search-query {
-  font-size: 11px;
-  color: var(--medium-gray);
-  margin-bottom: 4px;
-  font-style: italic;
-}
-
-.annotation-block-domain {
-  font-size: 11px;
-  color: var(--light-gray);
-  margin-bottom: 8px;
-  font-style: italic;
-}
-
-.annotation-block-description {
-  font-size: 13px;
-  color: var(--white);
-  margin-bottom: 8px;
-  line-height: 1.5;
-}
-
-.annotation-block-relevance {
-  font-size: 12px;
-  color: var(--light-gray);
-  line-height: 1.4;
-}
-
-.annotation-block-fetch-more {
-  min-width: 50px;
-  padding: 12px;
-  background-color: var(--black);
-  border: 1px solid var(--dark-gray);
-  border-radius: 4px;
-  color: var(--white);
-  font-size: 24px;
-  cursor: pointer;
+.editor-empty {
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.2s;
+  color: var(--medium-gray);
 }
 
-.annotation-block-fetch-more:hover:not(:disabled) {
-  background-color: var(--dark-gray);
-}
-
-.annotation-block-fetch-more:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* More Button Block */
-.more-button-block {
-  margin: 0;
-}
-
-.more-button {
-  padding: 8px 16px;
-  background-color: var(--black);
-  border: 1px solid var(--dark-gray);
-  border-radius: 4px;
+.editor-content {
+  flex: 1;
+  padding: 24px 32px;
+  overflow-y: auto;
+  outline: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
   color: var(--white);
   font-size: 14px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.more-button:hover {
-  background-color: var(--dark-gray);
-}
-
-.more-button:active {
-  background-color: var(--medium-gray);
-}
-
-/* List Block (BlockNote) */
-.list-block {
-  width: 100%;
-  margin: 8px 0;
-  border: 1px solid var(--dark-gray);
-  border-radius: 4px;
-  background-color: var(--black);
-}
-
-.list-block-header {
-  padding: 8px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  user-select: none;
-}
-
-.list-block-header-text {
-  color: var(--light-gray);
-  font-size: 12px;
-}
-
-.list-block-content {
-  padding: 12px;
-  border-top: 1px solid var(--dark-gray);
-}
-
-.list-block-items {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 12px 0;
-}
-
-.list-block-item {
-  position: relative;
-  padding: 8px 0 8px 20px !important;
-  color: var(--white);
-  font-size: 13px;
-  line-height: 1.5;
-  list-style: none;
-}
-
-.list-block-item::before {
-  content: '•';
-  position: absolute;
-  left: 0;
-  color: var(--light-gray);
-}
-
-.list-block-item:hover .list-block-delete-btn {
-  display: block;
-}
-
-.list-block-delete-btn {
-  display: none;
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background: var(--black);
-  border: none;
-  border-radius: 50%;
-  width: 20px;
-  height: 20px;
-  cursor: pointer;
-  color: var(--white-pure);
-  font-size: 12px;
-  line-height: 1;
-  padding: 0;
-}
-
-.list-block-delete-btn:hover {
-  background: var(--dark-gray);
-}
-
-.list-block-generate-more {
-  width: 100%;
-  padding: 12px;
-  background-color: var(--black);
-  border: 1px solid var(--dark-gray);
-  border-radius: 4px;
-  color: var(--white);
-  font-size: 24px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background-color 0.2s;
-}
-
-.list-block-generate-more:hover:not(:disabled) {
-  background-color: var(--dark-gray);
-}
-
-.list-block-generate-more:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  line-height: 1.6;
 }
 
 /* Analysis Spinner */

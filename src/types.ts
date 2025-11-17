@@ -9,27 +9,9 @@ export interface Annotation {
 export interface Note {
   id: string
   title: string
-  content: any // BlockNote document format: array of blocks
+  content: string // Plain text content
   createdAt: number
   updatedAt: number
-}
-
-export interface BaseBlock {
-  id: string
-  type: string
-  content?: any[]
-  props?: Record<string, any>
-  children?: BaseBlock[]
-}
-
-export interface AnnotationBlock extends BaseBlock {
-  type: 'annotation'
-  props: {
-    annotationsJson: string
-    sourceBlockId: string
-    isExpanded?: boolean
-    isFetching?: boolean
-  }
 }
 
 
