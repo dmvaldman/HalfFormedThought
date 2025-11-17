@@ -1,44 +1,7 @@
-import Together from "together-ai";
-import OpenAI from 'openai'
 import { AnnotationType } from './types'
+import { Message, llmService, LLMOptions } from './LLMService'
 
-interface Message {
-  role: 'system' | 'user' | 'assistant'
-  content: string
-}
-
-const SYSTEM_PROMPT = `
-You are a brilliant lateral thinker. A student of history, science, mathematics, philosophy and art.
-You think in multi-disciplinary analogies, finding provocative insights in the long tail of human thought.
-`.trim()
-
-const USER_PROMPT_PREAMBLE = `
-Here are some notes (very rough) about an essay I'm writing.
-Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
-Form your response as JSON with replies to each section of the essay {block_id: annotations}.
-where annotations is an array (0-3 in length) of {description, title, author, domain, search_query} (all fields are optional except description, title, domain):
-- \`description\` is a short summary of the source (0-4 sentences)
-- \`title\` is the name of the source (book title, essay title, etc).
-- \`author\` is the name of the author (person name, optional)
-- \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
-- \`search_query\` is a search query that will be used by a search engine to find more information about the source (optional)
-`.trim()
-
-const temperature = 0.6
-
-// Configuration: choose API provider ('together', 'kimi', or 'openrouter')
-// NOTE: 'kimi' requires a backend proxy due to CORS restrictions - direct browser access is blocked
-// Use 'together' or 'openrouter' for direct browser access without a proxy
-const API_PROVIDER: 'together' | 'kimi' | 'openrouter' = 'together'
-
-// Model names differ between providers
-const MODEL_NAMES = {
-  together: 'moonshotai/Kimi-K2-Instruct-0905',
-  kimi: 'kimi-k2-0905-preview',
-  openrouter: 'moonshotai/kimi-k2-0905'
-}
-
-// JSON Schema for annotations response (for Together.ai JSON mode)
+// JSON Schema for annotations response
 const ANNOTATIONS_SCHEMA = {
   type: 'object',
   properties: {
@@ -62,154 +25,22 @@ const ANNOTATIONS_SCHEMA = {
   required: ['annotations']
 }
 
-// OpenRouter structured output format for annotations
-const OPENROUTER_ANNOTATIONS_SCHEMA = {
-  type: 'json_schema',
-  json_schema: {
-    name: 'annotations',
-    strict: true,
-    schema: ANNOTATIONS_SCHEMA
-  }
-}
+const SYSTEM_PROMPT = `
+You are a brilliant lateral thinker. A student of history, science, mathematics, philosophy and art.
+You think in multi-disciplinary analogies, finding provocative insights in the long tail of human thought.
+`.trim()
 
-// JSON Schema for list items response
-const LIST_ITEMS_SCHEMA = {
-  type: 'object',
-  properties: {
-    items: {
-      type: 'array',
-      minItems: 1,
-      maxItems: 5,
-      items: {
-        type: 'string'
-      }
-    }
-  },
-  required: ['items']
-}
-
-// OpenRouter structured output format for list items
-const OPENROUTER_LIST_ITEMS_SCHEMA = {
-  type: 'json_schema',
-  json_schema: {
-    name: 'list_items',
-    strict: true,
-    schema: LIST_ITEMS_SCHEMA
-  }
-}
-
-// Initialize API clients
-const together = new Together({
-  apiKey: (import.meta as any).env?.VITE_TOGETHER_API_KEY || '',
-})
-
-const kimi = new OpenAI({
-  apiKey: (import.meta as any).env?.VITE_MOONSHOT_API_KEY || '',
-  baseURL: 'https://api.moonshot.ai/v1',
-  dangerouslyAllowBrowser: true, // Required for browser environments
-})
-
-const openrouter = new OpenAI({
-  apiKey: (import.meta as any).env?.VITE_OPENROUTER_API_KEY || '',
-  baseURL: 'https://openrouter.ai/api/v1',
-  dangerouslyAllowBrowser: true,
-  defaultHeaders: {
-    'HTTP-Referer': window.location.origin,
-    'X-Title': 'Half-Formed Thought'
-  }
-})
-
-async function callAPI(messages: Message[], schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
-  if (API_PROVIDER === 'kimi') {
-    return callKimiAPI(messages)
-  } else if (API_PROVIDER === 'openrouter') {
-    return callOpenRouterAPI(messages, schemaType, useStructuredOutput)
-  } else {
-    return callTogetherAPI(messages, schemaType)
-  }
-}
-
-async function callTogetherAPI(messages: Message[], schemaType: 'annotations' | 'list_items' = 'annotations') {
-  console.log('Messages:\n\n', messages)
-
-  // Select the appropriate schema based on schemaType
-  const schema = schemaType === 'annotations' ? ANNOTATIONS_SCHEMA : LIST_ITEMS_SCHEMA
-
-  const response = await together.chat.completions.create({
-    model: MODEL_NAMES.together,
-    messages: messages,
-    temperature: temperature,
-    response_format: { type: 'json_schema' as const, schema },
-    reasoning_effort: "high",
-    stream: false
-  })
-
-  const fullResponse = response.choices[0]?.message?.content || ''
-  return parseResponse(fullResponse)
-}
-
-async function callKimiAPI(messages: Message[]) {
-  const response = await kimi.chat.completions.create({
-    model: MODEL_NAMES.kimi,
-    messages: messages,
-    temperature: temperature,
-    response_format: { type: 'json_object' },
-    stream: false
-  })
-
-  const fullResponse = response.choices[0]?.message?.content || ''
-  return parseResponse(fullResponse)
-}
-
-async function callOpenRouterAPI(messages: Message[], schemaType: 'annotations' | 'list_items' = 'annotations', useStructuredOutput: boolean = true) {
-  console.log('Messages:\n\n', messages)
-
-  // Select the appropriate schema based on schemaType
-  const responseFormat = useStructuredOutput
-    ? (schemaType === 'annotations'
-      ? OPENROUTER_ANNOTATIONS_SCHEMA
-      : OPENROUTER_LIST_ITEMS_SCHEMA)
-    : { type: 'json_object' as const }
-
-  const response = await openrouter.chat.completions.create({
-    model: MODEL_NAMES.openrouter,
-    messages: messages,
-    temperature: temperature,
-    response_format: responseFormat as any,
-    stream: false
-  } as any)
-
-  const fullResponse = response.choices[0]?.message?.content || ''
-  return parseResponse(fullResponse)
-}
-
-async function parseResponse(fullResponse: string) {
-  // Parse the response
-  let cleanedResponse = fullResponse.trim()
-
-  const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/)
-  if (jsonMatch) {
-    cleanedResponse = jsonMatch[1].trim()
-  }
-
-  try {
-    const parsed = JSON.parse(cleanedResponse)
-    return parsed
-  } catch (parseError) {
-    // Try jsonrepair if available
-    try {
-      const { jsonrepair } = await import('jsonrepair')
-      const repaired = jsonrepair(cleanedResponse)
-      const parsed = JSON.parse(repaired)
-      return parsed
-    } catch (repairError) {
-      console.error('\nFailed to parse or repair JSON response:')
-      console.error('Full response:')
-      console.log(cleanedResponse)
-      throw parseError
-    }
-  }
-}
+const USER_PROMPT_PREAMBLE = `
+Here are some notes (very rough) about an essay I'm writing.
+Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
+Form your response as JSON with replies to each section of the essay {block_id: annotations}.
+where annotations is an array (0-3 in length) of {description, title, author, domain, search_query} (all fields are optional except description, title, domain):
+- \`description\` is a short summary of the source (0-4 sentences)
+- \`title\` is the name of the source (book title, essay title, etc).
+- \`author\` is the name of the author (person name, optional)
+- \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
+- \`search_query\` is a search query that will be used by a search engine to find more information about the source (optional)
+`.trim()
 
 // Conversation storage
 const STORAGE_KEY = 'half-formed-thought-conversations'
@@ -292,8 +123,13 @@ export class Analyzer {
     ]
 
     try {
-      // Call API with conversation history
-      const response = await callAPI(messages, 'annotations')
+      // Call LLM with conversation history
+      const options: LLMOptions = {
+        temperature: 0.6,
+        response_format: { type: 'json_schema' as const, schema: ANNOTATIONS_SCHEMA },
+        reasoning_effort: "high"
+      }
+      const response = await llmService.callLLM(messages, options)
 
       // Add assistant response to conversation
       const assistantMessage = JSON.stringify(response)
@@ -332,7 +168,11 @@ export async function analyzeNote(noteText: string, blockTexts: Array<{ id: stri
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: userPrompt }
   ]
-  const parsed = await callAPI(messages, 'annotations')
+  const options: LLMOptions = {
+    temperature: 0.6,
+    response_format: { type: 'json_schema' as const, schema: ANNOTATIONS_SCHEMA }
+  }
+  const parsed = await llmService.callLLM(messages, options)
 
   // Convert full response to our format
   const result: Record<string, AnnotationType[]> = {}
@@ -382,7 +222,11 @@ You MUST provide at least one annotation.${existingSourcesNote}
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: userPrompt }
   ]
-  const parsed = await callAPI(messages, 'annotations')
+  const options: LLMOptions = {
+    temperature: 0.6,
+    response_format: { type: 'json_schema' as const, schema: ANNOTATIONS_SCHEMA }
+  }
+  const parsed = await llmService.callLLM(messages, options)
 
   console.log('Response:', parsed.annotations)
 
