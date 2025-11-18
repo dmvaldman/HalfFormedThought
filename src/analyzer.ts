@@ -67,32 +67,35 @@ export class Analyzer {
   }
 
   private loadConversation(): Message[] {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) {
-      return []
-    }
+    // TODO: Re-enable conversation loading
+    // const stored = localStorage.getItem(STORAGE_KEY)
+    // if (!stored) {
+    //   return []
+    // }
 
-    try {
-      const parsed = JSON.parse(stored)
-      return (parsed[this.noteID] as Message[]) || []
-    } catch (error) {
-      console.error('Error loading conversation:', error)
-      return []
-    }
+    // try {
+    //   const parsed = JSON.parse(stored)
+    //   return (parsed[this.noteID] as Message[]) || []
+    // } catch (error) {
+    //   console.error('Error loading conversation:', error)
+    //   return []
+    // }
+    return [] // Always start fresh for debugging
   }
 
   private saveConversation(): void {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      const conversations: Record<string, Message[]> = stored ? JSON.parse(stored) : {}
-      conversations[this.noteID] = this.conversation
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
-    } catch (error) {
-      console.error('Error saving conversation:', error)
-    }
+    // TODO: Re-enable conversation saving
+    // try {
+    //   const stored = localStorage.getItem(STORAGE_KEY)
+    //   const conversations: Record<string, Message[]> = stored ? JSON.parse(stored) : {}
+    //   conversations[this.noteID] = this.conversation
+    //   localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
+    // } catch (error) {
+    //   console.error('Error saving conversation:', error)
+    // }
   }
 
-  async analyze(initialContent: string, patch: string, getNoteContent?: () => string): Promise<TextSpanAnnotation[] | null> {
+  async analyze(initialContent: string, patch: string, getNoteContent?: () => string, title?: string): Promise<TextSpanAnnotation[] | null> {
     // Skip if patch is empty or only contains headers
     const patchLines = patch.split('\n').filter(line => line.trim() !== '')
     if (patchLines.length <= 2) { // Just headers, no actual changes
@@ -101,10 +104,11 @@ export class Analyzer {
 
     let newUserMessage: string
 
-    // If this is a new conversation, create first message with preamble + full content
+    // If this is a new conversation, create first message with preamble + title + full content
     if (this.conversation.length === 0) {
       const fullContent = getNoteContent ? getNoteContent() : initialContent
-      newUserMessage = `${USER_PROMPT_PREAMBLE}\n\n${fullContent}`
+      const titleSection = title ? `Title: ${title}\n\n` : ''
+      newUserMessage = `${USER_PROMPT_PREAMBLE}\n\n${titleSection}${fullContent}`
     } else {
       // Otherwise, just use the patch
       newUserMessage = patch

@@ -16,22 +16,25 @@ function migrateNote(note: any): NoteType {
 }
 
 export function loadNotes(): NoteType[] {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (!stored) {
-    return []
-  }
-  try {
-    const notes = JSON.parse(stored)
-    const migratedNotes = notes.map(migrateNote)
-    saveNotes(migratedNotes)
-    return migratedNotes
-  } catch {
-    return []
-  }
+  // TODO: Re-enable note loading
+  // const stored = localStorage.getItem(STORAGE_KEY)
+  // if (!stored) {
+  //   return []
+  // }
+  // try {
+  //   const notes = JSON.parse(stored)
+  //   const migratedNotes = notes.map(migrateNote)
+  //   saveNotes(migratedNotes)
+  //   return migratedNotes
+  // } catch {
+  //   return []
+  // }
+  return [] // Always start fresh for debugging
 }
 
 export function saveNotes(notes: NoteType[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
+  // TODO: Re-enable note saving
+  // localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
 }
 
 export function generateId(): string {

@@ -77,7 +77,7 @@ class Note extends Component<NoteProps, NoteState> {
       console.log('===================\n')
 
       // Analyze the content change
-      this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this))
+      this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
         .then((result) => {
           if (result) {
             this.setState({ annotations: result })
