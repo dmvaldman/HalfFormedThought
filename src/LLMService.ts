@@ -29,6 +29,13 @@ async function parseResponse(fullResponse: string) {
   // Parse the response
   let cleanedResponse = fullResponse.trim()
 
+  // Log the raw response for debugging
+  console.log('Raw response length:', cleanedResponse.length)
+  if (cleanedResponse.length > 0) {
+    console.log('Raw response preview (first 500 chars):', cleanedResponse.substring(0, 500))
+    console.log('Raw response preview (last 500 chars):', cleanedResponse.substring(Math.max(0, cleanedResponse.length - 500)))
+  }
+
   const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/)
   if (jsonMatch) {
     cleanedResponse = jsonMatch[1].trim()
@@ -37,12 +44,26 @@ async function parseResponse(fullResponse: string) {
   try {
     const parsed = JSON.parse(cleanedResponse)
     return parsed
-  } catch (parseError) {
+  } catch (parseError: any) {
+    console.error('\nFailed to parse JSON response:')
+    console.error('Parse error:', parseError.message)
+
+    // Try to show context around the error
+    const errorPosMatch = parseError.message.match(/position (\d+)/)
+    if (errorPosMatch) {
+      const errorPos = parseInt(errorPosMatch[1])
+      const start = Math.max(0, errorPos - 100)
+      const end = Math.min(cleanedResponse.length, errorPos + 100)
+      console.error(`Context around error position ${errorPos}:`)
+      console.error(cleanedResponse.substring(start, end))
+    }
+
     // Try jsonrepair if available
     try {
       const { jsonrepair } = await import('jsonrepair')
       const repaired = jsonrepair(cleanedResponse)
       const parsed = JSON.parse(repaired)
+      console.log('Successfully repaired JSON with jsonrepair')
       return parsed
     } catch (repairError) {
       console.error('\nFailed to parse or repair JSON response:')
@@ -90,6 +111,13 @@ class TogetherLLMService extends LLMService {
     })
 
     const fullResponse = response.choices[0]?.message?.content || ''
+
+    if (!fullResponse) {
+      console.error('Empty response from Together.ai API')
+      console.error('Full response object:', JSON.stringify(response, null, 2))
+      throw new Error('Empty response from API')
+    }
+
     return parseResponse(fullResponse)
   }
 }

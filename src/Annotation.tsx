@@ -6,6 +6,9 @@ interface AnnotationProps {
   textSpan: string
   annotations: AnnotationType[]
   content: string
+  isOpen: boolean
+  onOpen: () => void
+  onClose: () => void
 }
 
 interface AnnotationState {
@@ -48,7 +51,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   private scheduleClose = () => {
     this.cancelClose()
     this.closeTimeout = setTimeout(() => {
-      this.setState({ isHovered: false, isVisible: false })
+      this.props.onClose()
       this.closeTimeout = null
     }, 1000)
   }
@@ -84,6 +87,9 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
       // Cancel any pending close
       this.cancelClose()
 
+      // Notify parent that this annotation is opening (will close others)
+      this.props.onOpen()
+
       this.setState({
         isHovered: true,
         isVisible: true,
@@ -111,9 +117,35 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
     this.scheduleClose()
   }
 
+  componentDidUpdate(prevProps: AnnotationProps) {
+    // If this annotation was closed externally, update state
+    if (prevProps.isOpen && !this.props.isOpen) {
+      this.setState({ isHovered: false, isVisible: false })
+      this.cancelClose()
+    }
+    // If this annotation was opened externally, show it (but don't call onOpen again)
+    if (!prevProps.isOpen && this.props.isOpen && !this.state.isHovered) {
+      if (this.containerRef.current) {
+        const rect = this.containerRef.current.getBoundingClientRect()
+        const overlay = this.containerRef.current.closest('.annotations-overlay')
+        const overlayRect = overlay?.getBoundingClientRect() || { top: 0, left: 0 }
+
+        this.setState({
+          isHovered: true,
+          isVisible: true,
+          popupPosition: {
+            top: rect.bottom - overlayRect.top + 8,
+            left: rect.left - overlayRect.left
+          }
+        })
+      }
+    }
+  }
+
   render() {
-    const { textSpan, annotations } = this.props
-    const { isHovered, popupPosition, isVisible } = this.state
+    const { textSpan, annotations, isOpen } = this.props
+    const { popupPosition, isVisible } = this.state
+    const isHovered = isOpen && this.state.isHovered
 
     return (
       <>
