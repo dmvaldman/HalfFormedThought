@@ -167,7 +167,7 @@ class Note extends Component<NoteProps, NoteState> {
     let key = 0
 
     this.state.annotations.forEach((textSpanAnnotation) => {
-      const { textSpan } = textSpanAnnotation
+      const { textSpan, annotations } = textSpanAnnotation
       const index = content.indexOf(textSpan, lastIndex)
 
       if (index !== -1) {
@@ -177,7 +177,7 @@ class Note extends Component<NoteProps, NoteState> {
         }
         else {
           console.error(`Text span found at backwards position: ${textSpan}, lastIndex: ${lastIndex}, found at index: ${index}`)
-          console.log('Annotations', textSpanAnnotation.annotations)
+          console.log('Annotations', annotations)
         }
 
         // Add the annotation component
@@ -186,7 +186,7 @@ class Note extends Component<NoteProps, NoteState> {
           <Annotation
             key={key++}
             textSpan={textSpan}
-            annotations={textSpanAnnotation.annotations}
+            annotations={annotations}
             content={content}
             isOpen={this.state.openAnnotationIndex === annotationIndex}
             onOpen={() => this.handleAnnotationOpen(annotationIndex)}
@@ -198,7 +198,7 @@ class Note extends Component<NoteProps, NoteState> {
       }
       else {
         console.error(`Text span not found: ${textSpan}`)
-        console.log('Annotations', textSpanAnnotation.annotations)
+        console.log('Annotations', annotations)
       }
     })
 

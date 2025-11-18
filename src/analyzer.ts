@@ -3,37 +3,32 @@ import { Message, llmService, LLMOptions } from './LLMService'
 
 // JSON Schema for annotations response
 const ANNOTATIONS_SCHEMA = {
-  type: 'object',
-  properties: {
-    annotations: {
-      type: 'array',
-      minItems: 1,
-      items: {
-        type: 'object',
-        properties: {
-          textSpan: { type: 'string' },
-          annotations: {
-            type: 'array',
-            minItems: 1,
-            maxItems: 3,
-            items: {
-              type: 'object',
-              properties: {
-                description: { type: 'string' },
-                title: { type: 'string' },
-                author: { type: 'string' },
-                domain: { type: 'string' },
-                search_query: { type: 'string' }
-              },
-              required: ['description', 'title', 'domain']
-            }
-          }
-        },
-        required: ['textSpan', 'annotations']
+  type: 'array',
+  minItems: 0,
+  maxItems: 3,
+  items: {
+    type: 'object',
+    properties: {
+      textSpan: { type: 'string' },
+      annotations: {
+        type: 'array',
+        minItems: 1,
+        maxItems: 3,
+        items: {
+          type: 'object',
+          properties: {
+            description: { type: 'string' },
+            title: { type: 'string' },
+            author: { type: 'string' },
+            domain: { type: 'string' },
+            search_query: { type: 'string' }
+          },
+          required: ['description', 'title', 'domain', 'search_query']
+        }
       }
-    }
-  },
-  required: ['annotations']
+    },
+    required: ['textSpan', 'annotations']
+  }
 }
 
 const SYSTEM_PROMPT = `
@@ -44,9 +39,9 @@ You think in multi-disciplinary analogies, finding provocative insights in the l
 const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
 Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
-Form your response as JSON with replies to each section of the essay {textSpan: string, annotations: [annotation..]}
+Form your response as a JSON array of [{textSpan: string, annotations: [annotation..]}, ...]
 - \`textSpan\` is the span of text being annotated. It *must* be an exact string match to the content (no "..." or correcting spelling or changing punctuation, etc).
-- \`annotations\` is an array (0-3 in length) of {description, title, author, domain, search_query}:
+- \`annotations\` is an array (1-3 in length) of {description, title, author, domain, search_query}:
 - \`description\` is a short summary of the source (0-4 sentences)
 - \`title\` is the name of the source (book title, essay title, etc).
 - \`author\` is the name of the author (optional)
@@ -137,10 +132,10 @@ export class Analyzer {
 
       const response = await llmService.callLLM(messages, options)
 
-      // Parse and validate response
+      // Parse and validate response - response should be an array directly
       let textSpanAnnotations: TextSpanAnnotation[] = []
-      if (response && response.annotations && Array.isArray(response.annotations)) {
-        textSpanAnnotations = response.annotations as TextSpanAnnotation[]
+      if (response && Array.isArray(response)) {
+        textSpanAnnotations = response as TextSpanAnnotation[]
       }
 
       // Add assistant response to conversation
