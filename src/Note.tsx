@@ -142,6 +142,10 @@ class Note extends Component<NoteProps, NoteState> {
         if (index > lastIndex) {
           segments.push(content.substring(lastIndex, index))
         }
+        else {
+          console.error(`Text span found at backwards position: ${textSpan}, lastIndex: ${lastIndex}, found at index: ${index}`)
+          console.log('Annotations', textSpanAnnotation.annotations)
+        }
 
         // Add the annotation component
         segments.push(
@@ -154,6 +158,10 @@ class Note extends Component<NoteProps, NoteState> {
         )
 
         lastIndex = index + textSpan.length
+      }
+      else {
+        console.error(`Text span not found: ${textSpan}`)
+        console.log('Annotations', textSpanAnnotation.annotations)
       }
     })
 

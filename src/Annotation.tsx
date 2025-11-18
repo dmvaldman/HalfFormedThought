@@ -11,16 +11,67 @@ interface AnnotationProps {
 interface AnnotationState {
   isHovered: boolean
   popupPosition: { top: number; left: number } | null
+  isVisible: boolean
 }
 
 class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   private containerRef = createRef<HTMLSpanElement>()
+  private popupRef = createRef<HTMLDivElement>()
+  private closeTimeout: NodeJS.Timeout | null = null
 
   constructor(props: AnnotationProps) {
     super(props)
     this.state = {
       isHovered: false,
-      popupPosition: null
+      popupPosition: null,
+      isVisible: false
+    }
+  }
+
+  componentDidMount() {
+    // Add document-level mouse move listener to detect when mouse enters popup
+    document.addEventListener('mousemove', this.handleDocumentMouseMove)
+  }
+
+  componentWillUnmount() {
+    document.removeEventListener('mousemove', this.handleDocumentMouseMove)
+    this.cancelClose()
+  }
+
+  private cancelClose = () => {
+    if (this.closeTimeout) {
+      clearTimeout(this.closeTimeout)
+      this.closeTimeout = null
+    }
+  }
+
+  private scheduleClose = () => {
+    this.cancelClose()
+    this.closeTimeout = setTimeout(() => {
+      this.setState({ isHovered: false, isVisible: false })
+      this.closeTimeout = null
+    }, 1000)
+  }
+
+  handleDocumentMouseMove = (e: MouseEvent) => {
+    // Check if mouse is over the popup
+    if (this.popupRef.current && this.state.isHovered) {
+      const popupRect = this.popupRef.current.getBoundingClientRect()
+      const mouseX = e.clientX
+      const mouseY = e.clientY
+
+      if (
+        mouseX >= popupRect.left &&
+        mouseX <= popupRect.right &&
+        mouseY >= popupRect.top &&
+        mouseY <= popupRect.bottom
+      ) {
+        // Mouse is over popup, cancel the close and ensure it's visible
+        this.cancelClose()
+        if (!this.state.isVisible) {
+          this.setState({ isVisible: true })
+        }
+      }
     }
   }
 
@@ -30,8 +81,12 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
       const overlay = this.containerRef.current.closest('.annotations-overlay')
       const overlayRect = overlay?.getBoundingClientRect() || { top: 0, left: 0 }
 
+      // Cancel any pending close
+      this.cancelClose()
+
       this.setState({
         isHovered: true,
+        isVisible: true,
         popupPosition: {
           top: rect.bottom - overlayRect.top + 8,
           left: rect.left - overlayRect.left
@@ -41,12 +96,24 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   }
 
   handleMouseLeave = () => {
-    this.setState({ isHovered: false, popupPosition: null })
+    // Schedule close after 1 second
+    this.scheduleClose()
+  }
+
+  handlePopupMouseEnter = () => {
+    // Cancel close when mouse enters popup
+    this.cancelClose()
+    this.setState({ isVisible: true })
+  }
+
+  handlePopupMouseLeave = () => {
+    // Schedule close when mouse leaves popup
+    this.scheduleClose()
   }
 
   render() {
     const { textSpan, annotations } = this.props
-    const { isHovered, popupPosition } = this.state
+    const { isHovered, popupPosition, isVisible } = this.state
 
     return (
       <>
@@ -58,7 +125,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
         >
           <RoughNotation
             type="highlight"
-            color="#ffd54f"
+            color="#333"
             strokeWidth={2}
             show={true}
           >
@@ -67,11 +134,14 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
         </span>
         {isHovered && popupPosition && (
           <div
-            className="annotation-popup"
+            ref={this.popupRef}
+            className={`annotation-popup ${isVisible ? 'visible' : ''}`}
             style={{
               top: `${popupPosition.top}px`,
               left: `${popupPosition.left}px`
             }}
+            onMouseEnter={this.handlePopupMouseEnter}
+            onMouseLeave={this.handlePopupMouseLeave}
           >
             {annotations.map((ann, index) => (
               <div key={index} className="annotation-item">

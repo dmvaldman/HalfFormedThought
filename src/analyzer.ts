@@ -45,12 +45,14 @@ const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
 Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
 Form your response as JSON with replies to each section of the essay {textSpan: string, annotations: [annotation..]}
-where \`textSpan\` is the span of text being annotated and \`annotations\` is an array (0-3 in length) of {description, title, author, domain, search_query}:
+- \`textSpan\` is the span of text being annotated. It *must* be an exact string match to the content (no "..." or correcting spelling or changing punctuation, etc).
+- \`annotations\` is an array (0-3 in length) of {description, title, author, domain, search_query}:
 - \`description\` is a short summary of the source (0-4 sentences)
 - \`title\` is the name of the source (book title, essay title, etc).
 - \`author\` is the name of the author (optional)
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
 - \`search_query\` is a search query that will be used by a search engine to find more information about the source
+Order your text spans in the order they appear in the content.
 `.trim()
 
 // Conversation storage key
