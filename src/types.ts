@@ -6,6 +6,11 @@ export interface AnnotationType {
   search_query?: string
 }
 
+export interface TextSpanAnnotation {
+  textSpan: string
+  annotations: AnnotationType[]
+}
+
 export interface NoteType {
   id: string
   title: string

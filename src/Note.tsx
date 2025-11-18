@@ -1,8 +1,9 @@
 import React, { Component } from 'react'
-import { NoteType } from './types'
+import { NoteType, TextSpanAnnotation } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer } from './analyzer'
+import Annotation from './Annotation'
 
 interface NoteProps {
   note: NoteType
@@ -13,8 +14,9 @@ interface NoteProps {
 class Note extends Component<NoteProps> {
   private contentEditableRef = React.createRef<HTMLDivElement>()
   private initialContent: string = ''
-  private debouncedContentLogger: () => void
   private analyzer: Analyzer
+  private annotations: TextSpanAnnotation[] = []
+  private debouncedContentLogger: () => void
 
   constructor(props: NoteProps) {
     super(props)
@@ -70,6 +72,12 @@ class Note extends Component<NoteProps> {
 
       // Analyze the content change
       this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this))
+        .then((result) => {
+          if (result) {
+            this.annotations = result
+            this.forceUpdate() // Re-render to show annotations
+          }
+        })
 
       this.initialContent = currentContent
     }
@@ -109,6 +117,49 @@ class Note extends Component<NoteProps> {
     console.log('Pasted content:', pastedText)
   }
 
+  renderAnnotations() {
+    const content = this.getContent()
+    if (this.annotations.length === 0) {
+      return null
+    }
+
+    // Build array of text segments and annotation components
+    const segments: (string | React.ReactElement)[] = []
+    let lastIndex = 0
+    let key = 0
+
+    this.annotations.forEach((textSpanAnnotation) => {
+      const { textSpan } = textSpanAnnotation
+      const index = content.indexOf(textSpan, lastIndex)
+
+      if (index !== -1) {
+        // Add text before the annotation
+        if (index > lastIndex) {
+          segments.push(content.substring(lastIndex, index))
+        }
+
+        // Add the annotation component
+        segments.push(
+          <Annotation
+            key={key++}
+            textSpan={textSpan}
+            annotations={textSpanAnnotation.annotations}
+            content={content}
+          />
+        )
+
+        lastIndex = index + textSpan.length
+      }
+    })
+
+    // Add remaining text
+    if (lastIndex < content.length) {
+      segments.push(content.substring(lastIndex))
+    }
+
+    return segments.length > 0 ? segments : content
+  }
+
   render() {
     const { note } = this.props
 
@@ -121,14 +172,22 @@ class Note extends Component<NoteProps> {
           value={note.title}
           onChange={this.handleTitleChange}
         />
-        <div
-          ref={this.contentEditableRef}
-          className="editor-content"
-          contentEditable
-          onInput={this.handleContentChange}
-          onPaste={this.handlePaste}
-          suppressContentEditableWarning
-        />
+        <div style={{ position: 'relative' }}>
+          <div
+            ref={this.contentEditableRef}
+            className="editor-content"
+            contentEditable
+            onInput={this.handleContentChange}
+            onPaste={this.handlePaste}
+            suppressContentEditableWarning
+          />
+          {/* Annotations overlay - mirrors content with annotations */}
+          {this.annotations.length > 0 && (
+            <div className="annotations-overlay">
+              {this.renderAnnotations()}
+            </div>
+          )}
+        </div>
       </div>
     )
   }

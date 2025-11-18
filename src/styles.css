@@ -275,3 +275,71 @@ button {
     transform: rotate(360deg);
   }
 }
+
+/* Annotations */
+.annotations-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  padding: 24px 32px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: transparent;
+  overflow: hidden;
+}
+
+.annotation-container {
+  position: relative;
+  display: inline;
+  pointer-events: auto;
+}
+
+.annotation-popup {
+  position: absolute;
+  background-color: var(--black);
+  border: 1px solid var(--dark-gray);
+  border-radius: 8px;
+  padding: 12px;
+  max-width: 400px;
+  z-index: 1000;
+  box-shadow: 0 4px 12px var(--shadow-dark);
+  pointer-events: none;
+}
+
+.annotation-item {
+  margin-bottom: 12px;
+}
+
+.annotation-item:last-child {
+  margin-bottom: 0;
+}
+
+.annotation-title {
+  font-weight: bold;
+  color: var(--white-pure);
+  margin-bottom: 4px;
+}
+
+.annotation-author {
+  font-size: 12px;
+  color: var(--light-gray);
+  margin-bottom: 4px;
+}
+
+.annotation-domain {
+  font-size: 11px;
+  color: var(--medium-gray);
+  font-style: italic;
+  margin-bottom: 4px;
+}
+
+.annotation-description {
+  font-size: 13px;
+  color: var(--white);
+  line-height: 1.4;
+}

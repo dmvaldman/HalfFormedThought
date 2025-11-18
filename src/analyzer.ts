@@ -1,4 +1,4 @@
-// import { AnnotationType } from './types'
+import { TextSpanAnnotation } from './types'
 import { Message, llmService, LLMOptions } from './LLMService'
 
 // JSON Schema for annotations response
@@ -8,17 +8,28 @@ const ANNOTATIONS_SCHEMA = {
     annotations: {
       type: 'array',
       minItems: 1,
-      maxItems: 3,
       items: {
         type: 'object',
         properties: {
-          description: { type: 'string' },
-          title: { type: 'string' },
-          author: { type: 'string' },
-          domain: { type: 'string' },
-          search_query: { type: 'string' }
+          textSpan: { type: 'string' },
+          annotations: {
+            type: 'array',
+            minItems: 1,
+            maxItems: 3,
+            items: {
+              type: 'object',
+              properties: {
+                description: { type: 'string' },
+                title: { type: 'string' },
+                author: { type: 'string' },
+                domain: { type: 'string' },
+                search_query: { type: 'string' }
+              },
+              required: ['description', 'title', 'domain']
+            }
+          }
         },
-        required: ['description', 'title', 'domain']
+        required: ['textSpan', 'annotations']
       }
     }
   },
@@ -33,13 +44,13 @@ You think in multi-disciplinary analogies, finding provocative insights in the l
 const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
 Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
-Form your response as JSON with replies to each section of the essay {block_id: annotations}.
-where annotations is an array (0-3 in length) of {description, title, author, domain, search_query} (all fields are optional except description, title, domain):
+Form your response as JSON with replies to each section of the essay {textSpan: string, annotations: [annotation..]}
+where \`textSpan\` is the span of text being annotated and \`annotations\` is an array (0-3 in length) of {description, title, author, domain, search_query}:
 - \`description\` is a short summary of the source (0-4 sentences)
 - \`title\` is the name of the source (book title, essay title, etc).
-- \`author\` is the name of the author (person name, optional)
+- \`author\` is the name of the author (optional)
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
-- \`search_query\` is a search query that will be used by a search engine to find more information about the source (optional)
+- \`search_query\` is a search query that will be used by a search engine to find more information about the source
 `.trim()
 
 // Conversation storage key
@@ -81,11 +92,11 @@ export class Analyzer {
     }
   }
 
-  async analyze(initialContent: string, patch: string, getNoteContent?: () => string): Promise<void> {
+  async analyze(initialContent: string, patch: string, getNoteContent?: () => string): Promise<TextSpanAnnotation[] | null> {
     // Skip if patch is empty or only contains headers
     const patchLines = patch.split('\n').filter(line => line.trim() !== '')
     if (patchLines.length <= 2) { // Just headers, no actual changes
-      return
+      return null
     }
 
     let newUserMessage: string
@@ -117,6 +128,12 @@ export class Analyzer {
       }
       const response = await llmService.callLLM(messages, options)
 
+      // Parse and validate response
+      let textSpanAnnotations: TextSpanAnnotation[] = []
+      if (response && response.annotations && Array.isArray(response.annotations)) {
+        textSpanAnnotations = response.annotations as TextSpanAnnotation[]
+      }
+
       // Add assistant response to conversation
       const assistantMessage = JSON.stringify(response)
       this.conversation.push({ role: 'assistant', content: assistantMessage })
@@ -124,11 +141,13 @@ export class Analyzer {
       // Save conversation
       this.saveConversation()
 
-      console.log('Analysis complete:', response)
+      console.log('Analysis complete:', textSpanAnnotations)
+      return textSpanAnnotations
     } catch (error) {
       console.error('Error analyzing content:', error)
       // Remove the user message if API call failed
       this.conversation.pop()
+      return null
     }
   }
 }
