@@ -128,8 +128,6 @@ export class Analyzer {
         reasoning_effort: "high"
       }
 
-      debugger;
-
       const response = await llmService.callLLM(messages, options)
 
       // Parse and validate response - response should be an array directly

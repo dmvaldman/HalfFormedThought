@@ -13,7 +13,6 @@ interface NoteProps {
 
 interface NoteState {
   annotations: TextSpanAnnotation[]
-  openAnnotationIndex: number | null
 }
 
 class Note extends Component<NoteProps, NoteState> {
@@ -25,8 +24,7 @@ class Note extends Component<NoteProps, NoteState> {
   constructor(props: NoteProps) {
     super(props)
     this.state = {
-      annotations: [],
-      openAnnotationIndex: null
+      annotations: []
     }
     // Initialize analyzer for this note
     this.analyzer = new Analyzer(props.note.id)
@@ -42,38 +40,7 @@ class Note extends Component<NoteProps, NoteState> {
       this.contentEditableRef.current.innerText = initial
       this.initialContent = initial
     }
-
-    // Add click listener to close popup when clicking outside
-    document.addEventListener('click', this.handleDocumentClick)
   }
-
-  componentWillUnmount() {
-    document.removeEventListener('click', this.handleDocumentClick)
-  }
-
-  handleDocumentClick = (e: MouseEvent) => {
-    // Check if click is outside any annotation popup or container
-    const overlay = document.querySelector('.annotations-overlay')
-    if (!overlay) return
-
-    const target = e.target as Element
-    const clickedOnPopup = target.closest('.annotation-popup')
-    const clickedOnContainer = target.closest('.annotation-container')
-
-    // If clicked outside both popup and container, close any open popup
-    if (!clickedOnPopup && !clickedOnContainer) {
-      this.setState({ openAnnotationIndex: null })
-    }
-  }
-
-  handleAnnotationOpen = (index: number) => {
-    this.setState({ openAnnotationIndex: index })
-  }
-
-  handleAnnotationClose = () => {
-    this.setState({ openAnnotationIndex: null })
-  }
-
 
   getContent(): string {
     return this.contentEditableRef.current?.innerText || ''
@@ -155,10 +122,11 @@ class Note extends Component<NoteProps, NoteState> {
     console.log('Pasted content:', pastedText)
   }
 
-  renderAnnotations() {
+  // Render content with annotation spans inline
+  renderContentWithAnnotations() {
     const content = this.getContent()
     if (this.state.annotations.length === 0) {
-      return null
+      return content
     }
 
     // Build array of text segments and annotation components
@@ -175,30 +143,17 @@ class Note extends Component<NoteProps, NoteState> {
         if (index > lastIndex) {
           segments.push(content.substring(lastIndex, index))
         }
-        else {
-          console.error(`Text span found at backwards position: ${textSpan}, lastIndex: ${lastIndex}, found at index: ${index}`)
-          console.log('Annotations', annotations)
-        }
 
-        // Add the annotation component
-        const annotationIndex = key
+        // Add the annotation component wrapping the text span
         segments.push(
           <Annotation
             key={key++}
             textSpan={textSpan}
             annotations={annotations}
-            content={content}
-            isOpen={this.state.openAnnotationIndex === annotationIndex}
-            onOpen={() => this.handleAnnotationOpen(annotationIndex)}
-            onClose={() => this.handleAnnotationClose()}
           />
         )
 
         lastIndex = index + textSpan.length
-      }
-      else {
-        console.error(`Text span not found: ${textSpan}`)
-        console.log('Annotations', annotations)
       }
     })
 
@@ -230,13 +185,9 @@ class Note extends Component<NoteProps, NoteState> {
             onInput={this.handleContentChange}
             onPaste={this.handlePaste}
             suppressContentEditableWarning
-          />
-          {/* Annotations overlay - mirrors content with annotations */}
-          {this.state.annotations.length > 0 && (
-            <div className="annotations-overlay">
-              {this.renderAnnotations()}
-            </div>
-          )}
+          >
+            {this.renderContentWithAnnotations()}
+          </div>
         </div>
       </div>
     )

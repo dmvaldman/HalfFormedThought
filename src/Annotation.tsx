@@ -5,39 +5,26 @@ import { AnnotationType } from './types'
 interface AnnotationProps {
   textSpan: string
   annotations: AnnotationType[]
-  content: string
-  isOpen: boolean
-  onOpen: () => void
-  onClose: () => void
 }
 
 interface AnnotationState {
-  isHovered: boolean
   popupPosition: { top: number; left: number } | null
   isVisible: boolean
 }
 
 class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
-  private containerRef = createRef<HTMLSpanElement>()
+  private containerRef = createRef<HTMLDivElement>()
   private popupRef = createRef<HTMLDivElement>()
   private closeTimeout: NodeJS.Timeout | null = null
 
   constructor(props: AnnotationProps) {
     super(props)
     this.state = {
-      isHovered: false,
       popupPosition: null,
       isVisible: false
     }
   }
-
-  componentDidMount() {
-    // Add document-level mouse move listener to detect when mouse enters popup
-    document.addEventListener('mousemove', this.handleDocumentMouseMove)
-  }
-
   componentWillUnmount() {
-    document.removeEventListener('mousemove', this.handleDocumentMouseMove)
     this.cancelClose()
   }
 
@@ -51,51 +38,25 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   private scheduleClose = () => {
     this.cancelClose()
     this.closeTimeout = setTimeout(() => {
-      this.props.onClose()
       this.closeTimeout = null
-    }, 1000)
-  }
-
-  handleDocumentMouseMove = (e: MouseEvent) => {
-    // Check if mouse is over the popup
-    if (this.popupRef.current && this.state.isHovered) {
-      const popupRect = this.popupRef.current.getBoundingClientRect()
-      const mouseX = e.clientX
-      const mouseY = e.clientY
-
-      if (
-        mouseX >= popupRect.left &&
-        mouseX <= popupRect.right &&
-        mouseY >= popupRect.top &&
-        mouseY <= popupRect.bottom
-      ) {
-        // Mouse is over popup, cancel the close and ensure it's visible
-        this.cancelClose()
-        if (!this.state.isVisible) {
-          this.setState({ isVisible: true })
-        }
-      }
-    }
+      this.setState({ isVisible: false })
+    }, 500)
   }
 
   handleMouseEnter = () => {
     if (this.containerRef.current) {
       const rect = this.containerRef.current.getBoundingClientRect()
-      const overlay = this.containerRef.current.closest('.annotations-overlay')
-      const overlayRect = overlay?.getBoundingClientRect() || { top: 0, left: 0 }
+      const container = this.containerRef.current.closest('.editor-content')
+      const containerRect = container?.getBoundingClientRect() || { top: 0, left: 0 }
 
       // Cancel any pending close
       this.cancelClose()
 
-      // Notify parent that this annotation is opening (will close others)
-      this.props.onOpen()
-
       this.setState({
-        isHovered: true,
         isVisible: true,
         popupPosition: {
-          top: rect.bottom - overlayRect.top + 8,
-          left: rect.left - overlayRect.left
+          top: rect.bottom - containerRect.top + 8,
+          left: rect.left - containerRect.left
         }
       })
     }
@@ -113,45 +74,22 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   }
 
   handlePopupMouseLeave = () => {
-    // Schedule close when mouse leaves popup
-    this.scheduleClose()
-  }
-
-  componentDidUpdate(prevProps: AnnotationProps) {
-    // If this annotation was closed externally, update state
-    if (prevProps.isOpen && !this.props.isOpen) {
-      this.setState({ isHovered: false, isVisible: false })
-      this.cancelClose()
-    }
-    // If this annotation was opened externally, show it (but don't call onOpen again)
-    if (!prevProps.isOpen && this.props.isOpen && !this.state.isHovered) {
-      if (this.containerRef.current) {
-        const rect = this.containerRef.current.getBoundingClientRect()
-        const overlay = this.containerRef.current.closest('.annotations-overlay')
-        const overlayRect = overlay?.getBoundingClientRect() || { top: 0, left: 0 }
-
-        this.setState({
-          isHovered: true,
-          isVisible: true,
-          popupPosition: {
-            top: rect.bottom - overlayRect.top + 8,
-            left: rect.left - overlayRect.left
-          }
-        })
-      }
-    }
+    // Schedule close immediately when mouse leaves popup
+    this.cancelClose()
+    this.setState({ isVisible: false })
   }
 
   render() {
-    const { textSpan, annotations, isOpen } = this.props
+    const { textSpan, annotations } = this.props
     const { popupPosition, isVisible } = this.state
-    const isHovered = isOpen && this.state.isHovered
+    // Show popup if hovered and we have position
+    const shouldShowPopup = isVisible && popupPosition !== null
 
     return (
       <>
         <span
           ref={this.containerRef}
-          className="annotation-container"
+          className="annotation-span-wrapper"
           onMouseEnter={this.handleMouseEnter}
           onMouseLeave={this.handleMouseLeave}
         >
@@ -164,11 +102,12 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
             {textSpan}
           </RoughNotation>
         </span>
-        {isHovered && popupPosition && (
+        {shouldShowPopup && (
           <div
             ref={this.popupRef}
             className={`annotation-popup ${isVisible ? 'visible' : ''}`}
             style={{
+              position: 'absolute',
               top: `${popupPosition.top}px`,
               left: `${popupPosition.left}px`
             }}
