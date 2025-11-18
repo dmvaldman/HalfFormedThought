@@ -126,6 +126,9 @@ export class Analyzer {
         response_format: { type: 'json_schema' as const, schema: ANNOTATIONS_SCHEMA },
         reasoning_effort: "high"
       }
+
+      debugger;
+
       const response = await llmService.callLLM(messages, options)
 
       // Parse and validate response

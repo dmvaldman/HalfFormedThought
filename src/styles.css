@@ -221,6 +221,11 @@ button {
   overflow: hidden;
 }
 
+.editor-content-wrapper {
+  position: relative;
+  height: 100%;
+}
+
 .editor-empty {
   flex: 1;
   display: flex;
@@ -230,6 +235,7 @@ button {
 }
 
 .editor-content {
+  height: 100%;
   flex: 1;
   padding: 24px 32px;
   overflow-y: auto;

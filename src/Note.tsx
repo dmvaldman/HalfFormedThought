@@ -11,21 +11,28 @@ interface NoteProps {
   onUpdateContent: (noteId: string, content: string) => void
 }
 
-class Note extends Component<NoteProps> {
+interface NoteState {
+  annotations: TextSpanAnnotation[]
+}
+
+class Note extends Component<NoteProps, NoteState> {
   private contentEditableRef = React.createRef<HTMLDivElement>()
   private initialContent: string = ''
   private analyzer: Analyzer
-  private annotations: TextSpanAnnotation[] = []
   private debouncedContentLogger: () => void
 
   constructor(props: NoteProps) {
     super(props)
+    this.state = {
+      annotations: []
+    }
     // Initialize analyzer for this note
     this.analyzer = new Analyzer(props.note.id)
 
     // Create debounced version of contentLogger
     this.debouncedContentLogger = debounce(this.contentLogger.bind(this), 2000)
   }
+
 
   getContent(): string {
     return this.contentEditableRef.current?.innerText || ''
@@ -49,8 +56,7 @@ class Note extends Component<NoteProps> {
         const trimmed = line.trim()
         // Remove empty lines, "No newline" messages, and lines that are just "+" or "-" with no content
         return trimmed !== '' &&
-               !trimmed.includes('\\ No newline at end of file') &&
-               !(trimmed === '+' || trimmed === '-')
+               !trimmed.includes('\\ No newline at end of file')
       })
       .join('\n')
 
@@ -74,8 +80,7 @@ class Note extends Component<NoteProps> {
       this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this))
         .then((result) => {
           if (result) {
-            this.annotations = result
-            this.forceUpdate() // Re-render to show annotations
+            this.setState({ annotations: result })
           }
         })
 
@@ -119,7 +124,7 @@ class Note extends Component<NoteProps> {
 
   renderAnnotations() {
     const content = this.getContent()
-    if (this.annotations.length === 0) {
+    if (this.state.annotations.length === 0) {
       return null
     }
 
@@ -128,7 +133,7 @@ class Note extends Component<NoteProps> {
     let lastIndex = 0
     let key = 0
 
-    this.annotations.forEach((textSpanAnnotation) => {
+    this.state.annotations.forEach((textSpanAnnotation) => {
       const { textSpan } = textSpanAnnotation
       const index = content.indexOf(textSpan, lastIndex)
 
@@ -172,7 +177,7 @@ class Note extends Component<NoteProps> {
           value={note.title}
           onChange={this.handleTitleChange}
         />
-        <div style={{ position: 'relative' }}>
+        <div className="editor-content-wrapper">
           <div
             ref={this.contentEditableRef}
             className="editor-content"
@@ -182,7 +187,7 @@ class Note extends Component<NoteProps> {
             suppressContentEditableWarning
           />
           {/* Annotations overlay - mirrors content with annotations */}
-          {this.annotations.length > 0 && (
+          {this.state.annotations.length > 0 && (
             <div className="annotations-overlay">
               {this.renderAnnotations()}
             </div>
