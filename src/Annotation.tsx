@@ -5,11 +5,14 @@ import { AnnotationType } from './types'
 interface AnnotationProps {
   textSpan: string
   annotations: AnnotationType[]
+  isVisible: boolean
+  onPopupOpen: () => void
+  onPopupClose: () => void
 }
 
 interface AnnotationState {
   popupPosition: { top: number; left: number } | null
-  isVisible: boolean
+  isHovered: boolean
 }
 
 class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
@@ -20,7 +23,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
     super(props)
     this.state = {
       popupPosition: null,
-      isVisible: false
+      isHovered: false
     }
   }
   componentWillUnmount() {
@@ -38,7 +41,10 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
     this.cancelClose()
     this.closeTimeout = setTimeout(() => {
       this.closeTimeout = null
-      this.setState({ isVisible: false })
+      // Only close if we're still not hovered after the timeout
+      if (!this.state.isHovered) {
+        this.props.onPopupClose()
+      }
     }, 500)
   }
 
@@ -52,35 +58,39 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
       this.cancelClose()
 
       this.setState({
-        isVisible: true,
         popupPosition: {
           top: rect.bottom - containerRect.top + 8,
           left: rect.left - containerRect.left
-        }
+        },
+        isHovered: true
       })
+
+      this.props.onPopupOpen()
     }
   }
 
   handleMouseLeave = () => {
-    // Schedule close after 1 second
+    this.setState({ isHovered: false })
+    // Schedule close after 2000ms if we're no longer hovered
     this.scheduleClose()
   }
 
   handlePopupMouseEnter = () => {
     // Cancel close when mouse enters popup
     this.cancelClose()
-    this.setState({ isVisible: true })
+    this.setState({ isHovered: true })
+    this.props.onPopupOpen()
   }
 
   handlePopupMouseLeave = () => {
-    // Schedule close immediately when mouse leaves popup
-    this.cancelClose()
-    this.setState({ isVisible: false })
+    this.setState({ isHovered: false })
+    // Schedule close after 2000ms if we're no longer hovered
+    this.scheduleClose()
   }
 
   render() {
-    const { textSpan, annotations } = this.props
-    const { popupPosition, isVisible } = this.state
+    const { textSpan, annotations, isVisible: isVisible } = this.props
+    const { popupPosition } = this.state
     // Show popup if hovered and we have position
     const shouldShowPopup = isVisible && popupPosition !== null
 

@@ -13,6 +13,7 @@ interface NoteProps {
 
 interface NoteState {
   annotations: TextSpanAnnotation[]
+  openAnnotationIndex: number | null
 }
 
 class Note extends Component<NoteProps, NoteState> {
@@ -24,7 +25,8 @@ class Note extends Component<NoteProps, NoteState> {
   constructor(props: NoteProps) {
     super(props)
     this.state = {
-      annotations: []
+      annotations: [],
+      openAnnotationIndex: null
     }
     // Initialize analyzer for this note
     this.analyzer = new Analyzer(props.note.id)
@@ -119,6 +121,14 @@ class Note extends Component<NoteProps, NoteState> {
     this.props.onUpdateTitle(this.props.note.id, title)
   }
 
+  handleAnnotationPopupOpen = (index: number) => {
+    this.setState({ openAnnotationIndex: index })
+  }
+
+  handleAnnotationPopupClose = () => {
+    this.setState({ openAnnotationIndex: null })
+  }
+
   handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     const pastedText = e.clipboardData.getData('text/plain')
     console.log('Pasted content:', pastedText)
@@ -134,9 +144,8 @@ class Note extends Component<NoteProps, NoteState> {
     // Build array of text segments and annotation components
     const segments: (string | React.ReactElement)[] = []
     let lastIndex = 0
-    let key = 0
 
-    this.state.annotations.forEach((textSpanAnnotation) => {
+    this.state.annotations.forEach((textSpanAnnotation, annotationIndex) => {
       const { textSpan, annotations } = textSpanAnnotation
       const index = content.indexOf(textSpan, lastIndex)
 
@@ -149,9 +158,12 @@ class Note extends Component<NoteProps, NoteState> {
         // Add the annotation component wrapping the text span
         segments.push(
           <Annotation
-            key={key++}
+            key={annotationIndex}
             textSpan={textSpan}
             annotations={annotations}
+            isVisible={this.state.openAnnotationIndex === annotationIndex}
+            onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
+            onPopupClose={this.handleAnnotationPopupClose}
           />
         )
 
