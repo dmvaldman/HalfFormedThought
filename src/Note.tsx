@@ -77,7 +77,7 @@ class Note extends Component<NoteProps, NoteState> {
     return cleanedPatch
   }
 
-  private contentLogger = () => {
+  private contentLogger = async () => {
     if (!this.contentEditableRef.current) return
 
     console.log('Pause detected')
@@ -91,20 +91,16 @@ class Note extends Component<NoteProps, NoteState> {
       console.log('===================\n')
 
       // Analyze the content change
-      this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
-        .then((result) => {
-          if (result) {
-            this.setState({ annotations: result })
-          }
-        })
+      const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
+      if (annotations) {
+        // Add the new annotations to the existing annotations
+        const newAnnotations = [...this.state.annotations, ...annotations]
+        this.setState({ annotations: newAnnotations })
+      }
 
       this.initialContent = currentContent
     }
-    else {
-      console.log('No change in content')
-    }
   }
-
 
   handleContentChange = () => {
     if (!this.contentEditableRef.current) return
