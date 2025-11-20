@@ -14,7 +14,6 @@ interface AnnotationState {
 
 class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   private containerRef = createRef<HTMLDivElement>()
-  private popupRef = createRef<HTMLDivElement>()
   private closeTimeout: NodeJS.Timeout | null = null
 
   constructor(props: AnnotationProps) {
@@ -104,7 +103,6 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
         </span>
         {shouldShowPopup && (
           <div
-            ref={this.popupRef}
             className={`annotation-popup ${isVisible ? 'visible' : ''}`}
             style={{
               position: 'absolute',

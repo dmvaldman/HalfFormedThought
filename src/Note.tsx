@@ -37,13 +37,19 @@ class Note extends Component<NoteProps, NoteState> {
     // Set initial content when component mounts
     if (this.contentEditableRef.current) {
       const initial = this.props.note.content || ''
-      this.contentEditableRef.current.innerText = initial
+      this.setContent(initial)
       this.initialContent = initial
     }
   }
 
   getContent(): string {
     return this.contentEditableRef.current?.innerText || ''
+  }
+
+  setContent(content: string) {
+    if (this.contentEditableRef.current) {
+      this.contentEditableRef.current.innerText = content
+    }
   }
 
   private getDiff(initialContent: string, currentContent: string): string {

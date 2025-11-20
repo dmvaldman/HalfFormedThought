@@ -39,7 +39,7 @@ You think in multi-disciplinary analogies, finding provocative insights in the l
 const USER_PROMPT_PREAMBLE = `
 Here are some notes (very rough) about an essay I'm writing.
 Research these ideas and provide places to extend/elaborate on them from a diversity of perspectives.
-Form your response as a JSON array of [{textSpan: string, annotations: [annotation..]}, ...]
+Form your response as an array of [{textSpan: string, annotations: [annotation..]}, ...]
 - \`textSpan\` is the span of text being annotated. It *must* be an exact string match to the content (no "..." or correcting spelling or changing punctuation, etc).
 - \`annotations\` is an array (1-3 in length) of {description, title, author, domain, search_query}:
 - \`description\` is a short summary of the source (0-4 sentences)
@@ -48,6 +48,12 @@ Form your response as a JSON array of [{textSpan: string, annotations: [annotati
 - \`domain\` is the domain of the source (history, physics, philosophy, art, dance, typography, religion, etc)
 - \`search_query\` is a search query that will be used by a search engine to find more information about the source
 Order your text spans in the order they appear in the content.
+`.trim()
+
+const PATCH_PROMPT_PREAMBLE = `
+I've updated the essay with new content. Here it is in the form of a patch.
+If no significant changes have been made since the last analysis, return an empty array.
+Otherwise, provide further annotations for the new content as new array of [{textSpan: string, annotations: [annotation..]}, ...].
 `.trim()
 
 // Conversation storage key
@@ -108,7 +114,8 @@ export class Analyzer {
       newUserMessage = `${USER_PROMPT_PREAMBLE}\n\n${titleSection}${fullContent}`
     } else {
       // Otherwise, just use the patch
-      newUserMessage = patch
+      const patchSection = patch ? `Patch:\n${patch}` : ''
+      newUserMessage = `${PATCH_PROMPT_PREAMBLE}\n\n${patchSection}`
     }
 
     // Add user message to conversation
@@ -125,7 +132,7 @@ export class Analyzer {
       const options: LLMOptions = {
         temperature: 0.6,
         response_format: { type: 'json_schema' as const, schema: ANNOTATIONS_SCHEMA },
-        reasoning_effort: "high"
+        reasoning_effort: "medium"
       }
 
       const response = await llmService.callLLM(messages, options)
