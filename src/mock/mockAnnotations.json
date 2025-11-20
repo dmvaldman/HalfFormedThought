@@ -1,0 +1,52 @@
+[
+  {
+    "textSpan": "Synthesis vs discrete. Wants every silo to be parceled out. Compositor primitives over integrated wholes.",
+    "annotations": [
+      {
+        "description": "The Bauhaus stage workshop (1921-29) treated the human body as a ‘compositor primitive’: basic geometric motions (leap, turn, fall) that could be re-assembled into new choreographic wholes. The school deliberately rejected the ‘integrated’ narrative ballet in favor of modular, re-mixable movement units—an early 20th-century rehearsal of the AI preference you describe.",
+        "title": "The Theater of the Bauhaus",
+        "author": "Oskar Schlemmer et al.",
+        "domain": "art / choreography",
+        "search_query": "Bauhaus stage workshop Oskar Schlemmer compositor primitives modular movement"
+      },
+      {
+        "description": "In 4th-century Buddhist epistemology, the mind is said to perceive ‘discrete dharmas’—momentary, atom-like events—then falsely synthesize them into stable objects. The Yogācāra school argued that enlightenment consists of keeping the primitives ‘unbundled’ so they can be recombined without reifying illusions.",
+        "title": "The Yogācāra School of Indian Buddhism",
+        "author": "Lambert Schmithausen",
+        "domain": "philosophy / religion",
+        "search_query": "Yogācāra discrete dharmas synthesis vs primitives Indian Buddhism"
+      }
+    ]
+  },
+  {
+    "textSpan": "Scaffolds vs surfaced. It wants semantic studs. It will fill in the rest.",
+    "annotations": [
+      {
+        "description": "Medieval cathedral builders left ‘structural studs’—rough stone projections—so future masons could attach new chapels or spires without demolishing the existing fabric. The unfinished scaffolding was *meant* to be filled in later, a material analogue to the AI desire for ‘semantic studs’.",
+        "title": "The Unfinished: Architecture and the Incomplete",
+        "author": "David Leatherbarrow",
+        "domain": "architecture / history",
+        "search_query": "medieval cathedral scaffolding studs unfinished architecture"
+      },
+      {
+        "description": "The ‘semantic web’ layer of RDF triples is deliberately sparse: subject-predicate-object ‘studs’ that machines can graft extra properties onto. Tim Berners-Lee called this ‘deferred elaboration’—the opposite of delivering a finished hierarchical document.",
+        "title": "Weaving the Web",
+        "author": "Tim Berners-Lee",
+        "domain": "computer science",
+        "search_query": "semantic web RDF triples deferred elaboration Berners-Lee"
+      }
+    ]
+  },
+  {
+    "textSpan": "flat over hierarchical",
+    "annotations": [
+      {
+        "description": "Mandaean cosmology pictures the universe as a flat mesh of ‘klila’ (garlands) rather than a vertical heaven-earth-hell stack. Salvation is lateral movement along the mesh, not ascent up a ladder—an ancient religious imaginaire that preempts the AI preference for flat addressability.",
+        "title": "The Mandaeans: Ancient Texts and Modern People",
+        "author": "Jorunn Jacobsen Buckley",
+        "domain": "religion / anthropology",
+        "search_query": "Mandaean cosmology flat klila garlands non-hierarchical universe"
+      }
+    ]
+  }
+]

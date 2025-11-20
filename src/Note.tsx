@@ -4,6 +4,7 @@ import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer } from './analyzer'
 import Annotation from './Annotation'
+import mockAnnotations from './mock/mockAnnotations.json'
 
 interface NoteProps {
   note: NoteType
@@ -120,7 +121,8 @@ class Note extends Component<NoteProps, NoteState> {
       console.log('===================\n')
 
       // Analyze the content change
-      const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
+      // const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
+      const annotations: TextSpanAnnotation[] = mockAnnotations
 
       if (annotations) {
         // Add the new annotations to the existing annotations
