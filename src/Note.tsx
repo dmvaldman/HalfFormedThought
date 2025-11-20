@@ -14,10 +14,12 @@ interface NoteProps {
 interface NoteState {
   annotations: TextSpanAnnotation[]
   openAnnotationIndex: number | null
+  content: string
 }
 
 class Note extends Component<NoteProps, NoteState> {
   private contentEditableRef = React.createRef<HTMLDivElement>()
+  private annotationLayerRef = React.createRef<HTMLDivElement>()
   private initialContent: string = ''
   private analyzer: Analyzer
   private debouncedContentLogger: () => void
@@ -26,7 +28,8 @@ class Note extends Component<NoteProps, NoteState> {
     super(props)
     this.state = {
       annotations: [],
-      openAnnotationIndex: null
+      openAnnotationIndex: null,
+      content: props.note.content || ''
     }
     // Initialize analyzer for this note
     this.analyzer = new Analyzer(props.note.id)
@@ -42,6 +45,30 @@ class Note extends Component<NoteProps, NoteState> {
       this.setContent(initial)
       this.initialContent = initial
     }
+  }
+
+  componentDidUpdate(prevProps: NoteProps) {
+    // If we switched notes, reset content + annotations and rehydrate the editor
+    if (prevProps.note.id !== this.props.note.id) {
+      const initial = this.props.note.content || ''
+      this.setContent(initial)
+      this.initialContent = initial
+      this.setState({
+        content: initial,
+        annotations: [],
+        openAnnotationIndex: null
+      })
+    }
+  }
+
+  shouldComponentUpdate(nextProps: NoteProps, nextState: NoteState) {
+    // Avoid rerendering the contentEditable on each keystroke; only rerender when
+    // note identity changes or annotation-related state changes.
+    if (nextProps.note.id !== this.props.note.id) return true
+    if (nextState.annotations !== this.state.annotations) return true
+    if (nextState.openAnnotationIndex !== this.state.openAnnotationIndex) return true
+    if (nextState.content !== this.state.content) return true
+    return false
   }
 
   getContent(): string {
@@ -94,6 +121,7 @@ class Note extends Component<NoteProps, NoteState> {
 
       // Analyze the content change
       const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
+
       if (annotations) {
         // Add the new annotations to the existing annotations
         const newAnnotations = [...this.state.annotations, ...annotations]
@@ -108,6 +136,7 @@ class Note extends Component<NoteProps, NoteState> {
     if (!this.contentEditableRef.current) return
 
     const content = this.getContent()
+    this.setState({ content })
 
     // Call the debounced logger (will log after 2 seconds of inactivity)
     this.debouncedContentLogger()
@@ -122,6 +151,7 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   handleAnnotationPopupOpen = (index: number) => {
+    // Opening a new annotation automatically closes any currently open one
     this.setState({ openAnnotationIndex: index })
   }
 
@@ -134,12 +164,14 @@ class Note extends Component<NoteProps, NoteState> {
     console.log('Pasted content:', pastedText)
   }
 
-  // Render content with annotation spans inline
-  renderContentWithAnnotations() {
-    const content = this.getContent()
+  // Render an overlay copy of the content with annotation spans so the editable
+  // DOM stays untouched (prevents cursor jumps/reflow).
+  renderAnnotationOverlay() {
+    const content = this.state.content
     if (this.state.annotations.length === 0) {
-      return content
+      return null
     }
+    const getPortalRoot = () => this.annotationLayerRef.current
 
     // Build array of text segments and annotation components
     const segments: (string | React.ReactElement)[] = []
@@ -164,6 +196,7 @@ class Note extends Component<NoteProps, NoteState> {
             isVisible={this.state.openAnnotationIndex === annotationIndex}
             onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
             onPopupClose={this.handleAnnotationPopupClose}
+            getPortalRoot={getPortalRoot}
           />
         )
 
@@ -193,15 +226,22 @@ class Note extends Component<NoteProps, NoteState> {
         />
         <div className="editor-content-wrapper">
           <div
+            ref={this.annotationLayerRef}
+            className="annotation-layer"
+            aria-hidden
+          >
+            <div className="annotation-overlay-content">
+              {this.renderAnnotationOverlay()}
+            </div>
+          </div>
+          <div
             ref={this.contentEditableRef}
             className="editor-content"
             contentEditable
             onInput={this.handleContentChange}
             onPaste={this.handlePaste}
             suppressContentEditableWarning
-          >
-            {this.renderContentWithAnnotations()}
-          </div>
+          />
         </div>
       </div>
     )
@@ -209,4 +249,3 @@ class Note extends Component<NoteProps, NoteState> {
 }
 
 export default Note
-

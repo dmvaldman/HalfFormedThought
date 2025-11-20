@@ -288,13 +288,41 @@ button {
 }
 
 /* Annotations */
+.annotation-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.annotation-overlay-content {
+  position: absolute;
+  inset: 0;
+  padding: 24px 32px;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.6;
+  color: transparent; /* Let the editable text show through by default */
+  pointer-events: none;
+}
+
+.annotation-layer .annotation-popup {
+  pointer-events: auto;
+}
+
+.annotation-overlay-content .annotation-span-wrapper {
+  pointer-events: auto; /* Allow hovers on highlighted spans */
+  color: var(--white); /* Show annotated text atop the highlight */
+}
+
 .annotation-span-wrapper {
   display: inline;
   position: relative;
 }
 
 .annotation-popup {
-  position: fixed;
+  position: absolute;
   background-color: var(--black);
   border: 1px solid var(--dark-gray);
   border-radius: 8px;
