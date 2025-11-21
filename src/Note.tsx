@@ -4,7 +4,6 @@ import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer } from './analyzer'
 import Annotation from './Annotation'
-import mockAnnotations from './mock/mockAnnotations.json'
 
 interface NoteProps {
   note: NoteType
@@ -24,6 +23,7 @@ class Note extends Component<NoteProps, NoteState> {
   private initialContent: string = ''
   private analyzer: Analyzer
   private debouncedContentLogger: () => void
+  private hasRunInitialAnalysis = false
 
   constructor(props: NoteProps) {
     super(props)
@@ -45,6 +45,7 @@ class Note extends Component<NoteProps, NoteState> {
       const initial = this.props.note.content || ''
       this.setContent(initial)
       this.initialContent = initial
+      this.maybeAnalyzePrefilledContent(initial)
     }
   }
 
@@ -54,11 +55,13 @@ class Note extends Component<NoteProps, NoteState> {
       const initial = this.props.note.content || ''
       this.setContent(initial)
       this.initialContent = initial
+      this.hasRunInitialAnalysis = false
       this.setState({
         content: initial,
         annotations: [],
         openAnnotationIndex: null
       })
+      this.maybeAnalyzePrefilledContent(initial)
     }
   }
 
@@ -70,6 +73,15 @@ class Note extends Component<NoteProps, NoteState> {
     if (nextState.openAnnotationIndex !== this.state.openAnnotationIndex) return true
     if (nextState.content !== this.state.content) return true
     return false
+  }
+
+  private maybeAnalyzePrefilledContent(initial: string) {
+    if (this.hasRunInitialAnalysis) return
+    if (!initial.trim()) return
+    this.hasRunInitialAnalysis = true
+    // Force the diff logic to treat the current content as newly added text.
+    this.initialContent = ''
+    this.contentLogger()
   }
 
   getContent(): string {
@@ -121,8 +133,7 @@ class Note extends Component<NoteProps, NoteState> {
       console.log('===================\n')
 
       // Analyze the content change
-      // const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
-      const annotations: TextSpanAnnotation[] = mockAnnotations
+      const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
 
       if (annotations) {
         // Add the new annotations to the existing annotations

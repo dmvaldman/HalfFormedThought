@@ -1,5 +1,6 @@
 import { TextSpanAnnotation } from './types'
 import { Message, llmService, LLMOptions } from './LLMService'
+import mockAnnotations from './mock/mockAnnotations.json'
 
 // JSON Schema for annotations response
 const ANNOTATIONS_SCHEMA = {
@@ -99,6 +100,7 @@ export class Analyzer {
   }
 
   async analyze(initialContent: string, patch: string, getNoteContent?: () => string, title?: string): Promise<TextSpanAnnotation[] | null> {
+    return mockAnnotations as TextSpanAnnotation[]
     // Skip if patch is empty or only contains headers
     const patchLines = patch.split('\n').filter(line => line.trim() !== '')
     if (patchLines.length <= 2) { // Just headers, no actual changes

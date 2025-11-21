@@ -15,17 +15,15 @@ class App extends Component<{}, AppState> {
 
   constructor(props: {}) {
     super(props)
-    // TODO: Re-enable note loading
-    // const notes = loadNotes()
-    const notes: NoteType[] = [] // Always start fresh for debugging
+    const notes = loadNotes()
+
     this.state = {
       notes,
       currentNoteId: notes.length > 0 ? notes[0].id : null,
     }
-    // TODO: Re-enable note saving
-    // Create debounced version of saveNotes
+
     this.debouncedSaveNotes = debounce((notes: NoteType[]) => {
-      // saveNotes(notes)
+      saveNotes(notes)
     }, 500)
   }
 
@@ -42,13 +40,14 @@ class App extends Component<{}, AppState> {
       createdAt: now,
       updatedAt: now,
     }
+
     const updatedNotes = [newNote, ...this.state.notes]
     this.setState({
       notes: updatedNotes,
       currentNoteId: newNote.id,
     })
-    // TODO: Re-enable note saving
-    // saveNotes(updatedNotes)
+
+    saveNotes(updatedNotes)
   }
 
   handleDeleteNote = (noteId: string) => {
@@ -63,8 +62,7 @@ class App extends Component<{}, AppState> {
       notes: updatedNotes,
       currentNoteId: newCurrentNoteId,
     })
-    // TODO: Re-enable note saving
-    // saveNotes(updatedNotes)
+    saveNotes(updatedNotes)
   }
 
   handleUpdateTitle = (noteId: string, title: string) => {
@@ -119,4 +117,3 @@ class App extends Component<{}, AppState> {
 }
 
 export default App
-

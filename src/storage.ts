@@ -1,4 +1,5 @@
 import { NoteType } from './types'
+import mockNoteContent from './mock/mockNoteContent'
 
 const STORAGE_KEY = 'half-formed-thought-notes'
 
@@ -16,6 +17,15 @@ function migrateNote(note: any): NoteType {
 }
 
 export function loadNotes(): NoteType[] {
+  // Use mock data for now
+  const initialNote: NoteType = {
+    id: generateId(),
+    title: 'What do AI applications want?',
+    content: mockNoteContent,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+
   // TODO: Re-enable note loading
   // const stored = localStorage.getItem(STORAGE_KEY)
   // if (!stored) {
@@ -29,7 +39,7 @@ export function loadNotes(): NoteType[] {
   // } catch {
   //   return []
   // }
-  return [] // Always start fresh for debugging
+  return [initialNote] // Always start fresh for debugging
 }
 
 export function saveNotes(notes: NoteType[]): void {
