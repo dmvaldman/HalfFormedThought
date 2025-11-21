@@ -313,7 +313,8 @@ button {
 
 .annotation-overlay-content .annotation-span-wrapper {
   pointer-events: auto; /* Allow hovers on highlighted spans */
-  color: var(--white); /* Show annotated text atop the highlight */
+  /* color: var(--white); */
+  color: transparent;
 }
 
 .annotation-span-wrapper {
