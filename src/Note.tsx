@@ -164,12 +164,13 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   handleAnnotationPopupOpen = (index: number) => {
-    // Opening a new annotation automatically closes any currently open one
     this.setState({ openAnnotationIndex: index })
   }
 
-  handleAnnotationPopupClose = () => {
-    this.setState({ openAnnotationIndex: null })
+  handleAnnotationPopupClose = (index: number) => {
+    if (this.state.openAnnotationIndex === index) {
+      this.setState({ openAnnotationIndex: null })
+    }
   }
 
   handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
@@ -207,6 +208,7 @@ class Note extends Component<NoteProps, NoteState> {
             textSpan={textSpan}
             annotations={annotations}
             isVisible={this.state.openAnnotationIndex === annotationIndex}
+            annotationId={annotationIndex}
             onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
             onPopupClose={this.handleAnnotationPopupClose}
             getPortalRoot={getPortalRoot}

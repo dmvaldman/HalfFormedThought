@@ -7,8 +7,9 @@ interface AnnotationProps {
   textSpan: string
   annotations: AnnotationType[]
   isVisible: boolean
+  annotationId: number
   onPopupOpen: () => void
-  onPopupClose: () => void
+  onPopupClose: (id: number) => void
   getPortalRoot?: () => HTMLElement | null
   onRequestFocus?: () => void
 }
@@ -41,13 +42,6 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
     this.removeDragListeners()
   }
 
-  componentDidUpdate(prevProps: AnnotationProps) {
-    if (prevProps.isVisible && !this.props.isVisible && this.state.isPinned) {
-      // eslint-disable-next-line react/no-did-update-set-state
-      this.setState({ isPinned: false })
-    }
-  }
-
   private cancelClose = () => {
     if (this.closeTimeout) {
       clearTimeout(this.closeTimeout)
@@ -62,7 +56,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
       this.closeTimeout = null
       // Only close if we're still not hovered after the timeout and still visible
       if (!this.state.isHovered && this.props.isVisible && !this.state.isPinned) {
-        this.props.onPopupClose()
+        this.props.onPopupClose(this.props.annotationId)
       }
     }, 500)
   }
@@ -76,13 +70,18 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
       // Cancel any pending close
       this.cancelClose()
 
-      this.setState({
-        popupPosition: {
-          top: rect.bottom - containerRect.top + 8,
-          left: rect.left - containerRect.left
-        },
-        isHovered: true,
-        isPinned: false
+      this.setState(prevState => {
+        const shouldPreservePosition = prevState.isPinned && prevState.popupPosition
+        return {
+          popupPosition: shouldPreservePosition
+            ? prevState.popupPosition
+            : {
+                top: rect.bottom - containerRect.top + 8,
+                left: rect.left - containerRect.left
+              },
+          isHovered: true,
+          isPinned: shouldPreservePosition ? true : false
+        }
       })
 
       this.props.onPopupOpen()
@@ -112,7 +111,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
 
   handleCloseClick = () => {
     this.setState({ isPinned: false })
-    this.props.onPopupClose()
+    this.props.onPopupClose(this.props.annotationId)
   }
 
   private removeDragListeners() {
@@ -165,7 +164,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
     const { popupPosition, isPinned, isDragging } = this.state
     const portalRoot = this.props.getPortalRoot?.() || null
     // Show popup if hovered and we have position
-    const shouldShowPopup = isVisible && popupPosition !== null && portalRoot
+    const shouldShowPopup = (isVisible || isPinned) && popupPosition !== null && portalRoot
 
     return (
       <>
@@ -202,14 +201,34 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
                 onMouseDown={this.handleDragStart}
               >
                 <span className="annotation-popup-label">Annotations</span>
-                <button
-                  className="annotation-popup-close"
-                  onClick={this.handleCloseClick}
-                  onMouseDown={(e) => e.stopPropagation()}
-                  aria-label="Close annotations"
-                >
-                  ×
-                </button>
+                <div className="annotation-popup-actions">
+                  <button
+                    className={`annotation-popup-pin ${isPinned ? 'active' : ''}`}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      this.setState(prev => ({ isPinned: !prev.isPinned }))
+                    }}
+                    aria-label={isPinned ? 'Unpin annotations' : 'Pin annotations'}
+                  >
+                    <svg
+                      className="annotation-popup-pin-icon"
+                      viewBox="0 0 24 24"
+                      role="presentation"
+                      focusable="false"
+                    >
+                      <path d="M8 3h8l-.4 5.5H19v2h-6.5V21h-1V10.5H5v-2h3.4z" />
+                    </svg>
+                  </button>
+                  <button
+                    className="annotation-popup-close"
+                    onClick={this.handleCloseClick}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    aria-label="Close annotations"
+                  >
+                    ×
+                  </button>
+                </div>
               </div>
               <div className="annotation-popup-body">
                 {annotations.map((ann, index) => (

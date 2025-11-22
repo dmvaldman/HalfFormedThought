@@ -340,7 +340,8 @@ button {
   overflow: hidden;
 }
 
-.annotation-popup.visible {
+.annotation-popup.visible,
+.annotation-popup.pinned {
   opacity: 1;
   pointer-events: auto;
 }
@@ -364,6 +365,45 @@ button {
   font-size: 11px;
   letter-spacing: 0.08em;
   color: var(--light-gray);
+}
+
+.annotation-popup-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.annotation-popup-pin {
+  background: none;
+  border: none;
+  color: var(--light-gray);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.annotation-popup-pin-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  fill: none;
+  stroke: var(--white-pure);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.annotation-popup-pin.active {
+  color: var(--accent-cyan);
+}
+
+.annotation-popup-pin.active .annotation-popup-pin-icon {
+  fill: var(--white-pure);
+}
+
+.annotation-popup-pin:hover {
+  color: var(--white-pure);
 }
 
 .annotation-popup-close {
