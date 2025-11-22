@@ -16,21 +16,36 @@ interface AnnotationProps {
 interface AnnotationState {
   popupPosition: { top: number; left: number } | null
   isHovered: boolean
+  isPinned: boolean
+  isDragging: boolean
+  dragOffset: { x: number; y: number } | null
 }
 
 class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   private containerRef = createRef<HTMLDivElement>()
+  private popupRef = createRef<HTMLDivElement>()
   private closeTimeout: NodeJS.Timeout | null = null
 
   constructor(props: AnnotationProps) {
     super(props)
     this.state = {
       popupPosition: null,
-      isHovered: false
+      isHovered: false,
+      isPinned: false,
+      isDragging: false,
+      dragOffset: null
     }
   }
   componentWillUnmount() {
     this.cancelClose()
+    this.removeDragListeners()
+  }
+
+  componentDidUpdate(prevProps: AnnotationProps) {
+    if (prevProps.isVisible && !this.props.isVisible && this.state.isPinned) {
+      // eslint-disable-next-line react/no-did-update-set-state
+      this.setState({ isPinned: false })
+    }
   }
 
   private cancelClose = () => {
@@ -41,11 +56,12 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   }
 
   private scheduleClose = () => {
+    if (this.state.isPinned) return
     this.cancelClose()
     this.closeTimeout = setTimeout(() => {
       this.closeTimeout = null
       // Only close if we're still not hovered after the timeout and still visible
-      if (!this.state.isHovered && this.props.isVisible) {
+      if (!this.state.isHovered && this.props.isVisible && !this.state.isPinned) {
         this.props.onPopupClose()
       }
     }, 500)
@@ -65,7 +81,8 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
           top: rect.bottom - containerRect.top + 8,
           left: rect.left - containerRect.left
         },
-        isHovered: true
+        isHovered: true,
+        isPinned: false
       })
 
       this.props.onPopupOpen()
@@ -73,6 +90,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   }
 
   handleMouseLeave = () => {
+    if (this.state.isPinned) return
     this.setState({ isHovered: false })
     // Schedule close after 500ms if we're no longer hovered
     this.scheduleClose()
@@ -86,14 +104,65 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   }
 
   handlePopupMouseLeave = () => {
+    if (this.state.isPinned) return
     this.setState({ isHovered: false })
     // Schedule close after 2000ms if we're no longer hovered
     this.scheduleClose()
   }
 
+  handleCloseClick = () => {
+    this.setState({ isPinned: false })
+    this.props.onPopupClose()
+  }
+
+  private removeDragListeners() {
+    window.removeEventListener('mousemove', this.handleDragMove)
+    window.removeEventListener('mouseup', this.handleDragEnd)
+  }
+
+  handleDragStart = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    if (!this.state.popupPosition) return
+    const portalRoot = this.props.getPortalRoot?.()
+    if (!portalRoot) return
+    const containerRect = portalRoot.getBoundingClientRect()
+    const offsetX = event.clientX - (containerRect.left + this.state.popupPosition.left)
+    const offsetY = event.clientY - (containerRect.top + this.state.popupPosition.top)
+
+    this.setState({
+      isDragging: true,
+      dragOffset: { x: offsetX, y: offsetY },
+      isPinned: true
+    })
+    window.addEventListener('mousemove', this.handleDragMove)
+    window.addEventListener('mouseup', this.handleDragEnd)
+  }
+
+  handleDragMove = (event: MouseEvent) => {
+    const { dragOffset } = this.state
+    if (!dragOffset) return
+    const portalRoot = this.props.getPortalRoot?.()
+    if (!portalRoot) return
+    const containerRect = portalRoot.getBoundingClientRect()
+    this.setState({
+      popupPosition: {
+        top: event.clientY - containerRect.top - dragOffset.y,
+        left: event.clientX - containerRect.left - dragOffset.x
+      }
+    })
+  }
+
+  handleDragEnd = () => {
+    this.removeDragListeners()
+    this.setState({
+      isDragging: false,
+      dragOffset: null
+    })
+  }
+
   render() {
     const { textSpan, annotations, isVisible: isVisible } = this.props
-    const { popupPosition } = this.state
+    const { popupPosition, isPinned, isDragging } = this.state
     const portalRoot = this.props.getPortalRoot?.() || null
     // Show popup if hovered and we have position
     const shouldShowPopup = isVisible && popupPosition !== null && portalRoot
@@ -119,31 +188,47 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
         {shouldShowPopup &&
           createPortal(
             <div
-              className={`annotation-popup ${isVisible ? 'visible' : ''}`}
+              ref={this.popupRef}
+              className={`annotation-popup ${isVisible ? 'visible' : ''} ${isPinned ? 'pinned' : ''} ${isDragging ? 'dragging' : ''}`}
               style={{
-                position: 'absolute',
                 top: `${popupPosition.top}px`,
                 left: `${popupPosition.left}px`
               }}
               onMouseEnter={this.handlePopupMouseEnter}
               onMouseLeave={this.handlePopupMouseLeave}
             >
-              {annotations.map((ann, index) => (
-                <div key={index} className="annotation-item">
-                  {ann.title && (
-                    <div className="annotation-title">{ann.title}</div>
-                  )}
-                  {ann.author && (
-                    <div className="annotation-author">{ann.author}</div>
-                  )}
-                  {ann.domain && (
-                    <div className="annotation-domain">{ann.domain}</div>
-                  )}
-                  {ann.description && (
-                    <div className="annotation-description">{ann.description}</div>
-                  )}
-                </div>
-              ))}
+              <div
+                className="annotation-popup-header"
+                onMouseDown={this.handleDragStart}
+              >
+                <span className="annotation-popup-label">Annotations</span>
+                <button
+                  className="annotation-popup-close"
+                  onClick={this.handleCloseClick}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  aria-label="Close annotations"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="annotation-popup-body">
+                {annotations.map((ann, index) => (
+                  <div key={index} className="annotation-item">
+                    {ann.title && (
+                      <div className="annotation-title">{ann.title}</div>
+                    )}
+                    {ann.author && (
+                      <div className="annotation-author">{ann.author}</div>
+                    )}
+                    {ann.domain && (
+                      <div className="annotation-domain">{ann.domain}</div>
+                    )}
+                    {ann.description && (
+                      <div className="annotation-description">{ann.description}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>,
             portalRoot
           )}
