@@ -15,6 +15,7 @@ interface NoteState {
   annotations: TextSpanAnnotation[]
   openAnnotationIndex: number | null
   content: string
+  isAnalyzing: boolean
 }
 
 class Note extends Component<NoteProps, NoteState> {
@@ -30,7 +31,8 @@ class Note extends Component<NoteProps, NoteState> {
     this.state = {
       annotations: [],
       openAnnotationIndex: null,
-      content: props.note.content || ''
+      content: props.note.content || '',
+      isAnalyzing: false
     }
     // Initialize analyzer for this note
     this.analyzer = new Analyzer(props.note.id)
@@ -149,16 +151,24 @@ class Note extends Component<NoteProps, NoteState> {
     if (currentContent !== this.initialContent) {
       const diff = this.getDiff(this.initialContent, currentContent)
 
-      // Analyze the content change
-      const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
+      // Show spinner while analyzing
+      this.setState({ isAnalyzing: true })
 
-      if (annotations) {
-        // Add the new annotations to the existing annotations
-        const newAnnotations = [...this.state.annotations, ...annotations]
-        this.setState({ annotations: newAnnotations })
+      try {
+        // Analyze the content change
+        const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
+
+        if (annotations) {
+          // Add the new annotations to the existing annotations
+          const newAnnotations = [...this.state.annotations, ...annotations]
+          this.setState({ annotations: newAnnotations })
+        }
+
+        this.initialContent = currentContent
+      } finally {
+        // Hide spinner when done
+        this.setState({ isAnalyzing: false })
       }
-
-      this.initialContent = currentContent
     }
   }
 
@@ -275,6 +285,11 @@ class Note extends Component<NoteProps, NoteState> {
             suppressContentEditableWarning
           />
         </div>
+        {this.state.isAnalyzing && (
+          <div className="analysis-spinner">
+            <div className="spinner-icon" />
+          </div>
+        )}
       </div>
     )
   }
