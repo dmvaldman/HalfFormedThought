@@ -2,6 +2,8 @@ import { TextSpanAnnotation } from './types'
 import { Message, llmService, LLMOptions } from './LLMService'
 import mockAnnotations from './mock/mockAnnotations.json'
 
+const MOCK = import.meta.env.VITE_MOCK === 'true'
+
 // JSON Schema for annotations response
 const ANNOTATIONS_SCHEMA = {
   type: 'array',
@@ -100,7 +102,12 @@ export class Analyzer {
   }
 
   async analyze(initialContent: string, patch: string, getNoteContent?: () => string, title?: string): Promise<TextSpanAnnotation[] | null> {
-    return mockAnnotations as TextSpanAnnotation[]
+    if (MOCK) {
+      return mockAnnotations as TextSpanAnnotation[]
+    }
+
+    console.log('analyzing...')
+
     // Skip if patch is empty or only contains headers
     const patchLines = patch.split('\n').filter(line => line.trim() !== '')
     if (patchLines.length <= 2) { // Just headers, no actual changes
@@ -122,6 +129,7 @@ export class Analyzer {
 
     // Add user message to conversation
     this.conversation.push({ role: 'user', content: newUserMessage })
+    console.log('User message:\n\n', newUserMessage)
 
     // Build messages array for API call
     const messages: Message[] = [
@@ -138,6 +146,7 @@ export class Analyzer {
       }
 
       const response = await llmService.callLLM(messages, options)
+      console.log('Response:\n\n', response)
 
       // Parse and validate response - response should be an array directly
       let textSpanAnnotations: TextSpanAnnotation[] = []
@@ -152,7 +161,6 @@ export class Analyzer {
       // Save conversation
       this.saveConversation()
 
-      console.log('Analysis complete:', textSpanAnnotations)
       return textSpanAnnotations
     } catch (error) {
       console.error('Error analyzing content:', error)

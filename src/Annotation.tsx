@@ -176,7 +176,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
           onMouseDown={this.props.onRequestFocus}
         >
           <RoughNotation
-            type="underline"
+            type="box"
             color="rgba(100, 100, 100, 0.55)"
             strokeWidth={2}
             show={true}

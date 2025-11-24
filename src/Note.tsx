@@ -128,10 +128,6 @@ class Note extends Component<NoteProps, NoteState> {
     if (currentContent !== this.initialContent) {
       const diff = this.getDiff(this.initialContent, currentContent)
 
-      console.log('\n=== Content Diff ===')
-      console.log(diff)
-      console.log('===================\n')
-
       // Analyze the content change
       const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
 
@@ -174,8 +170,8 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
-    const pastedText = e.clipboardData.getData('text/plain')
-    console.log('Pasted content:', pastedText)
+    // const pastedText = e.clipboardData.getData('text/plain')
+    // console.log('Pasted content:', pastedText)
   }
 
   // Render an overlay copy of the content with annotation spans so the editable

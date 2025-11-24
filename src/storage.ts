@@ -1,6 +1,7 @@
 import { NoteType } from './types'
 import mockNoteContent from './mock/mockNoteContent'
 
+const MOCK = import.meta.env.VITE_MOCK === 'true'
 const STORAGE_KEY = 'half-formed-thought-notes'
 
 function migrateNote(note: any): NoteType {
@@ -17,29 +18,29 @@ function migrateNote(note: any): NoteType {
 }
 
 export function loadNotes(): NoteType[] {
-  // Use mock data for now
-  const initialNote: NoteType = {
-    id: generateId(),
-    title: 'What do AI applications want?',
-    content: mockNoteContent,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+  if (MOCK) {
+    const initialNote: NoteType = {
+      id: generateId(),
+      title: 'What do AI applications want?',
+      content: mockNoteContent,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+
+    return [initialNote]
   }
 
-  // TODO: Re-enable note loading
   // const stored = localStorage.getItem(STORAGE_KEY)
-  // if (!stored) {
-  //   return []
-  // }
-  // try {
-  //   const notes = JSON.parse(stored)
-  //   const migratedNotes = notes.map(migrateNote)
-  //   saveNotes(migratedNotes)
-  //   return migratedNotes
-  // } catch {
-  //   return []
-  // }
-  return [initialNote] // Always start fresh for debugging
+  let stored = ''
+  if (!stored) {
+    return []
+  }
+
+  const notes = JSON.parse(stored)
+  const migratedNotes = notes.map(migrateNote)
+  saveNotes(migratedNotes)
+
+  return migratedNotes
 }
 
 export function saveNotes(notes: NoteType[]): void {

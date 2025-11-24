@@ -29,13 +29,6 @@ async function parseResponse(fullResponse: string) {
   // Parse the response
   let cleanedResponse = fullResponse.trim()
 
-  // Log the raw response for debugging
-  console.log('Raw response length:', cleanedResponse.length)
-  if (cleanedResponse.length > 0) {
-    console.log('Raw response preview (first 500 chars):', cleanedResponse.substring(0, 500))
-    console.log('Raw response preview (last 500 chars):', cleanedResponse.substring(Math.max(0, cleanedResponse.length - 500)))
-  }
-
   const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/)
   if (jsonMatch) {
     cleanedResponse = jsonMatch[1].trim()
@@ -91,8 +84,6 @@ class TogetherLLMService extends LLMService {
   }
 
   async callLLM(messages: Message[], options: LLMOptions = {}): Promise<any> {
-    console.log('Messages:\n\n', messages)
-
     const {
       temperature = 0.6,
       response_format,
@@ -175,8 +166,6 @@ class OpenRouterLLMService extends LLMService {
   }
 
   async callLLM(messages: Message[], options: LLMOptions = {}): Promise<any> {
-    console.log('Messages:\n\n', messages)
-
     const {
       temperature = 0.6,
       response_format = { type: 'json_object' },
