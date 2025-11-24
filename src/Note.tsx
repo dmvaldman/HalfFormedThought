@@ -2,8 +2,66 @@ import React, { Component } from 'react'
 import { NoteType, TextSpanAnnotation } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
-import { Analyzer } from './analyzer'
+import { Analyzer, Tool } from './analyzer'
 import Annotation from './Annotation'
+
+// Tool definitions
+const ANNOTATE_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'annotate',
+    description: 'Annotate a text span with research sources and insights. Call this tool multiple times to annotate different text spans. Each call should annotate one text span.',
+    parameters: {
+      type: 'object',
+      properties: {
+        textSpan: {
+          type: 'string',
+          description: 'The exact span of text being annotated. Must be an exact string match to the content (no "...", correcting spelling/punctuation or starting/ending with punctuation/whitespace).'
+        },
+        annotations: {
+          type: 'object',
+          properties: {
+            description: {
+              type: 'string',
+              description: 'A short summary of the source (0-4 sentences)'
+            },
+            title: {
+              type: 'string',
+              description: 'The name of the source (book title, essay title, etc)'
+            },
+            author: {
+              type: 'string',
+              description: 'The name of the author (optional)'
+            },
+            domain: {
+              type: 'string',
+              description: 'The domain of the source (history, physics, philosophy, poetry, art, dance, typography, religion, etc)'
+            },
+            search_query: {
+              type: 'string',
+              description: 'A search query that will be used by a search engine to find more information about the source'
+            }
+          },
+          required: ['description', 'title', 'domain', 'search_query']
+        }
+      },
+      required: ['textSpan', 'annotations']
+    }
+  }
+}
+
+const GET_NOTE_CONTENT_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'getNoteContent',
+    description: 'Get the full current content of the note. Use this when you need to see the complete text to understand context or find exact text spans.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: []
+    }
+  }
+}
 
 interface NoteProps {
   note: NoteType
@@ -33,11 +91,45 @@ class Note extends Component<NoteProps, NoteState> {
       content: props.note.content || '',
       isAnalyzing: false
     }
-    // Initialize analyzer for this note
-    this.analyzer = new Analyzer(props.note.id)
+
+    // Define tools with their implementations
+    const tools: Tool[] = [
+      {
+        ...ANNOTATE_TOOL,
+        execute: this.onAnnotate.bind(this)
+      },
+      // {
+      //   ...GET_NOTE_CONTENT_TOOL,
+      //   execute: this.getNoteContent.bind(this)
+      // }
+    ]
+
+    // Initialize analyzer for this note with tools
+    this.analyzer = new Analyzer(props.note.id, tools)
 
     // Create debounced version of contentLogger
     this.debouncedContentLogger = debounce(this.contentLogger.bind(this), 2000)
+  }
+
+  // Tool method for Kimi to call when it wants to annotate text spans
+  private onAnnotate = (annotation: TextSpanAnnotation) => {
+    if (annotation) {
+      // strip punctuation/whitespace from the start and end of the text span
+      annotation.textSpan = annotation.textSpan.trim()
+      // remove leading/trailing punctuation/whitespace
+      // hack because for some reason Kimi always starts with this
+      annotation.textSpan = annotation.textSpan.replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+
+      console.log('onAnnotate called with text span:', annotation.textSpan)
+      // Add the new annotations to the existing annotations
+      const newAnnotations = [...this.state.annotations, annotation]
+      this.setState({ annotations: newAnnotations })
+    }
+  }
+
+  // Tool method for Kimi to get the current note content
+  private getNoteContent = (): string => {
+    return this.getContent()
   }
 
   componentDidMount() {
@@ -143,14 +235,8 @@ class Note extends Component<NoteProps, NoteState> {
       this.setState({ isAnalyzing: true })
 
       try {
-        // Analyze the content change
-        const annotations = await this.analyzer.analyze(this.initialContent, diff, this.getContent.bind(this), this.props.note.title)
-
-        if (annotations) {
-          // Add the new annotations to the existing annotations
-          const newAnnotations = [...this.state.annotations, ...annotations]
-          this.setState({ annotations: newAnnotations })
-        }
+        // Analyze the content change - annotations will be added progressively via onAnnotate tool
+        await this.analyzer.analyze(currentContent, diff, this.props.note.title)
 
         this.initialContent = currentContent
       } catch (error) {

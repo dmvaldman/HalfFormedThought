@@ -1,15 +1,33 @@
 import Together from "together-ai";
 import OpenAI from 'openai'
 
-export interface Message {
-  role: 'system' | 'user' | 'assistant'
+export interface ToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string
+  }
+}
+
+export interface ToolResponse {
+  tool_call_id: string
+  role: 'tool'
+  name: string
   content: string
+}
+
+export interface Message {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content: string | null
+  tool_calls?: ToolCall[]
 }
 
 export interface LLMOptions {
   temperature?: number
   response_format?: any
   reasoning_effort?: string
+  tools?: any[]
   [key: string]: any // Allow additional LLM-specific options
 }
 
@@ -67,9 +85,15 @@ async function parseResponse(fullResponse: string) {
   }
 }
 
+interface LLMResponse {
+  content: string | null
+  tool_calls?: ToolCall[]
+  finish_reason?: string | null
+}
+
 // Abstract LLM Service
 export abstract class LLMService {
-  abstract callLLM(messages: Message[], options?: LLMOptions): Promise<any>
+  abstract callLLM(messages: Message[], options?: LLMOptions): Promise<LLMResponse>
 }
 
 // Together.ai implementation
@@ -83,33 +107,45 @@ class TogetherLLMService extends LLMService {
     })
   }
 
-  async callLLM(messages: Message[], options: LLMOptions = {}): Promise<any> {
+  async callLLM(messages: Message[], options: LLMOptions = {}): Promise<LLMResponse> {
     const {
       temperature = 0.6,
       response_format,
       reasoning_effort = "high",
+      tools,
       ...restOptions
     } = options
 
     const response = await this.client.chat.completions.create({
       model: MODEL_NAMES.together,
-      messages: messages,
+      messages: messages as any,
       temperature,
       ...(response_format && { response_format }),
       reasoning_effort,
+      ...(tools && { tools }),
       stream: false,
       ...restOptions
     })
 
-    const fullResponse = response.choices[0]?.message?.content || ''
+    const choice = response.choices[0]
+    const message = choice?.message
+    const content = message?.content || null
+    const tool_calls = message?.tool_calls as ToolCall[] | undefined
+    const finish_reason = choice?.finish_reason || null
 
-    if (!fullResponse) {
-      console.error('Empty response from Together.ai API')
-      console.error('Full response object:', JSON.stringify(response, null, 2))
-      throw new Error('Empty response from API')
+    // If there are tool calls, return them directly
+    if (tool_calls && tool_calls.length > 0) {
+      return { content, tool_calls, finish_reason }
     }
 
-    return parseResponse(fullResponse)
+    // If tools are provided, don't parse as JSON - LLM may return plain text
+    if (tools && tools.length > 0) {
+      return { content, tool_calls, finish_reason }
+    }
+
+    console.error('Empty response from Together.ai API')
+    console.error('Full response object:', JSON.stringify(response, null, 2))
+    throw new Error('Empty response from API')
   }
 }
 
@@ -126,25 +162,42 @@ class KimiLLMService extends LLMService {
     })
   }
 
-  async callLLM(messages: Message[], options: LLMOptions = {}): Promise<any> {
+  async callLLM(messages: Message[], options: LLMOptions = {}): Promise<LLMResponse> {
     const {
       temperature = 0.6,
-      response_format = { type: 'json_object' },
+      response_format,
       reasoning_effort, // Not supported by Kimi, ignore
+      tools,
       ...restOptions
     } = options
 
     const response = await this.client.chat.completions.create({
       model: MODEL_NAMES.kimi,
-      messages: messages,
+      messages: messages as any,
       temperature,
-      response_format,
+      ...(response_format && { response_format }),
+      ...(tools && { tools }),
       stream: false,
       ...restOptions
     })
 
-    const fullResponse = response.choices[0]?.message?.content || ''
-    return parseResponse(fullResponse)
+    const choice = response.choices[0]
+    const message = choice?.message
+    const content = message?.content || null
+    const tool_calls = message?.tool_calls as ToolCall[] | undefined
+    const finish_reason = choice?.finish_reason || null
+
+    // If there are tool calls, return them directly
+    if (tool_calls && tool_calls.length > 0) {
+      return { content, tool_calls, finish_reason }
+    }
+
+    // If tools are provided, don't parse as JSON - LLM may return plain text
+    if (tools && tools.length > 0) {
+      return { content, tool_calls, finish_reason }
+    }
+
+    return { content: null, tool_calls, finish_reason }
   }
 }
 
@@ -165,24 +218,41 @@ class OpenRouterLLMService extends LLMService {
     })
   }
 
-  async callLLM(messages: Message[], options: LLMOptions = {}): Promise<any> {
+  async callLLM(messages: Message[], options: LLMOptions = {}): Promise<LLMResponse> {
     const {
       temperature = 0.6,
       response_format = { type: 'json_object' },
+      tools,
       ...restOptions
     } = options
 
     const response = await this.client.chat.completions.create({
       model: MODEL_NAMES.openrouter,
-      messages: messages,
+      messages: messages as any,
       temperature,
       response_format: response_format as any,
+      ...(tools && { tools }),
       stream: false,
       ...restOptions
     } as any)
 
-    const fullResponse = response.choices[0]?.message?.content || ''
-    return parseResponse(fullResponse)
+    const choice = response.choices[0]
+    const message = choice?.message
+    const content = message?.content || null
+    const tool_calls = message?.tool_calls as ToolCall[] | undefined
+    const finish_reason = choice?.finish_reason || null
+
+    // If there are tool calls, return them directly
+    if (tool_calls && tool_calls.length > 0) {
+      return { content, tool_calls, finish_reason }
+    }
+
+    // If tools are provided, don't parse as JSON - LLM may return plain text
+    if (tools && tools.length > 0) {
+      return { content, tool_calls, finish_reason }
+    }
+
+    return { content: null, tool_calls, finish_reason }
   }
 }
 
