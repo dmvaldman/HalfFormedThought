@@ -85,7 +85,28 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   getContent(): string {
-    return this.contentEditableRef.current?.innerText || ''
+    const root = this.contentEditableRef.current
+    if (!root) return ''
+
+    let result = ''
+
+    root.childNodes.forEach(node => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        result += node.textContent ?? ''
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement
+        if (el.tagName === 'BR') {
+          result += '\n'
+        } else if (el.tagName === 'DIV' || el.tagName === 'P') {
+          // text inside the block
+          result += (el.textContent ?? '')
+          // block break = newline, even for <div><br></div>
+          result += '\n'
+        }
+      }
+    })
+
+    return result
   }
 
   setContent(content: string) {
