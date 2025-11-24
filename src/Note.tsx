@@ -24,7 +24,6 @@ class Note extends Component<NoteProps, NoteState> {
   private initialContent: string = ''
   private analyzer: Analyzer
   private debouncedContentLogger: () => void
-  private hasRunInitialAnalysis = false
 
   constructor(props: NoteProps) {
     super(props)
@@ -56,7 +55,6 @@ class Note extends Component<NoteProps, NoteState> {
       const initial = this.props.note.content || ''
       this.setContent(initial)
       this.initialContent = initial
-      this.hasRunInitialAnalysis = false
       this.setState({
         content: initial,
         annotations: [],
@@ -72,6 +70,7 @@ class Note extends Component<NoteProps, NoteState> {
     if (nextState.annotations !== this.state.annotations) return true
     if (nextState.openAnnotationIndex !== this.state.openAnnotationIndex) return true
     if (nextState.content !== this.state.content) return true
+    if (nextState.isAnalyzing !== this.state.isAnalyzing) return true
     return false
   }
 
@@ -154,6 +153,8 @@ class Note extends Component<NoteProps, NoteState> {
         }
 
         this.initialContent = currentContent
+      } catch (error) {
+        console.error('Analysis error:', error)
       } finally {
         // Hide spinner when done
         this.setState({ isAnalyzing: false })

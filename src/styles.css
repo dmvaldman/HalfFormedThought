@@ -459,3 +459,9 @@ button {
   color: var(--white);
   line-height: 1.4;
 }
+
+.annotation-search-query {
+  font-size: 11px;
+  color: var(--medium-gray);
+  margin-bottom: 4px;
+}

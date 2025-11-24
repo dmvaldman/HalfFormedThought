@@ -242,6 +242,9 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
                     {ann.domain && (
                       <div className="annotation-domain">{ann.domain}</div>
                     )}
+                    {ann.search_query && (
+                      <div className="annotation-search-query">{ann.search_query}</div>
+                    )}
                     {ann.description && (
                       <div className="annotation-description">{ann.description}</div>
                     )}
