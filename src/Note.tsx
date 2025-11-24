@@ -47,7 +47,6 @@ class Note extends Component<NoteProps, NoteState> {
       const initial = this.props.note.content || ''
       this.setContent(initial)
       this.initialContent = initial
-      this.maybeAnalyzePrefilledContent(initial)
     }
   }
 
@@ -63,7 +62,6 @@ class Note extends Component<NoteProps, NoteState> {
         annotations: [],
         openAnnotationIndex: null
       })
-      this.maybeAnalyzePrefilledContent(initial)
     }
   }
 
@@ -75,15 +73,6 @@ class Note extends Component<NoteProps, NoteState> {
     if (nextState.openAnnotationIndex !== this.state.openAnnotationIndex) return true
     if (nextState.content !== this.state.content) return true
     return false
-  }
-
-  private maybeAnalyzePrefilledContent(initial: string) {
-    if (this.hasRunInitialAnalysis) return
-    if (!initial.trim()) return
-    this.hasRunInitialAnalysis = true
-    // Force the diff logic to treat the current content as newly added text.
-    this.initialContent = ''
-    this.contentLogger()
   }
 
   getContent(): string {
@@ -108,7 +97,7 @@ class Note extends Component<NoteProps, NoteState> {
       }
     })
 
-    return result
+    return result.trim()
   }
 
   setContent(content: string) {
