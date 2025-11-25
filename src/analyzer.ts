@@ -129,8 +129,6 @@ export class Analyzer {
       newUserMessage = `${PATCH_PROMPT_PREAMBLE}\n\n${patchSection}`
     }
 
-    debugger;
-
     // Add user message to messages
     this.messages.push({ role: 'user', content: newUserMessage })
     console.log('User message:\n\n', newUserMessage)
@@ -252,10 +250,10 @@ export class Analyzer {
 
     // Execute the tool with appropriate arguments
     if (functionName === 'annotate') {
-      // For annotate, wrap the single annotation object in an array to match TextSpanAnnotation type
+      // For annotate, args.annotations is already an array of 1-3 annotation objects
       const annotation: TextSpanAnnotation = {
         textSpan: args.textSpan,
-        annotations: [args.annotations] // Wrap single annotation object in array
+        annotations: args.annotations
       }
       console.log('Calling tool.execute with annotation:', annotation)
 

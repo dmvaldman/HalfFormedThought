@@ -19,30 +19,36 @@ const ANNOTATE_TOOL = {
           description: 'The exact span of text being annotated. Must be an exact string match to the content (no "...", correcting spelling/punctuation or starting/ending with punctuation/whitespace).'
         },
         annotations: {
-          type: 'object',
-          properties: {
-            description: {
-              type: 'string',
-              description: 'A short summary of the source (0-4 sentences)'
+          type: 'array',
+          minItems: 1,
+          maxItems: 3,
+          description: 'Array of 1-3 annotation objects for this text span, providing diverse perspectives from different domains',
+          items: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+                description: 'A short summary of the source (0-4 sentences)'
+              },
+              title: {
+                type: 'string',
+                description: 'The name of the source (book title, essay title, etc)'
+              },
+              author: {
+                type: 'string',
+                description: 'The name of the author (optional)'
+              },
+              domain: {
+                type: 'string',
+                description: 'The domain of the source (history, physics, philosophy, poetry, art, dance, typography, religion, etc)'
+              },
+              search_query: {
+                type: 'string',
+                description: 'A search query that will be used by a search engine to find more information about the source'
+              }
             },
-            title: {
-              type: 'string',
-              description: 'The name of the source (book title, essay title, etc)'
-            },
-            author: {
-              type: 'string',
-              description: 'The name of the author (optional)'
-            },
-            domain: {
-              type: 'string',
-              description: 'The domain of the source (history, physics, philosophy, poetry, art, dance, typography, religion, etc)'
-            },
-            search_query: {
-              type: 'string',
-              description: 'A search query that will be used by a search engine to find more information about the source'
-            }
-          },
-          required: ['description', 'title', 'domain', 'search_query']
+            required: ['description', 'title', 'domain', 'search_query']
+          }
         }
       },
       required: ['textSpan', 'annotations']
