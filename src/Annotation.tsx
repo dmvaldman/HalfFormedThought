@@ -1,11 +1,11 @@
 import { Component, createRef } from 'react'
 import { createPortal } from 'react-dom'
 import { RoughNotation } from 'react-rough-notation'
-import { AnnotationType } from './types'
+import { RecordType } from './types'
 
 interface AnnotationProps {
   textSpan: string
-  annotations: AnnotationType[]
+  records: RecordType[]
   isVisible: boolean
   annotationId: number
   onPopupOpen: () => void
@@ -160,7 +160,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
   }
 
   render() {
-    const { textSpan, annotations, isVisible: isVisible } = this.props
+    const { textSpan, records, isVisible: isVisible } = this.props
     const { popupPosition, isPinned, isDragging } = this.state
     const portalRoot = this.props.getPortalRoot?.() || null
     // Show popup if hovered and we have position
@@ -231,7 +231,7 @@ class AnnotationComponent extends Component<AnnotationProps, AnnotationState> {
                 </div>
               </div>
               <div className="annotation-popup-body">
-                {annotations.map((ann, index) => (
+                {records.map((ann, index) => (
                   <div key={index} className="annotation-item">
                     {ann.title && (
                       <div className="annotation-title">{ann.title}</div>

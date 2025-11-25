@@ -1,4 +1,4 @@
-export interface AnnotationType {
+export interface RecordType {
   description?: string
   title?: string
   author?: string
@@ -8,7 +8,7 @@ export interface AnnotationType {
 
 export interface TextSpanAnnotation {
   textSpan: string
-  annotations: AnnotationType[]
+  records: RecordType[]
 }
 
 export interface NoteType {

@@ -18,11 +18,11 @@ const ANNOTATE_TOOL = {
           type: 'string',
           description: 'The exact span of text being annotated. Must be an exact string match to the content (no "...", correcting spelling/punctuation or starting/ending with punctuation/whitespace).'
         },
-        annotations: {
+        records: {
           type: 'array',
           minItems: 1,
           maxItems: 3,
-          description: 'Array of 1-3 annotation objects for this text span, providing diverse perspectives from different domains',
+          description: 'Array of 1-3 record objects for this text span, providing diverse perspectives from different domains',
           items: {
             type: 'object',
             properties: {
@@ -51,7 +51,7 @@ const ANNOTATE_TOOL = {
           }
         }
       },
-      required: ['textSpan', 'annotations']
+      required: ['textSpan', 'records']
     }
   }
 }
@@ -301,7 +301,7 @@ class Note extends Component<NoteProps, NoteState> {
     let lastIndex = 0
 
     this.state.annotations.forEach((textSpanAnnotation, annotationIndex) => {
-      const { textSpan, annotations } = textSpanAnnotation
+      const { textSpan, records } = textSpanAnnotation
       const index = content.indexOf(textSpan, lastIndex)
 
       if (index !== -1) {
@@ -315,7 +315,7 @@ class Note extends Component<NoteProps, NoteState> {
           <Annotation
             key={annotationIndex}
             textSpan={textSpan}
-            annotations={annotations}
+            records={records}
             isVisible={this.state.openAnnotationIndex === annotationIndex}
             annotationId={annotationIndex}
             onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}

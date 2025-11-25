@@ -250,10 +250,10 @@ export class Analyzer {
 
     // Execute the tool with appropriate arguments
     if (functionName === 'annotate') {
-      // For annotate, args.annotations is already an array of 1-3 annotation objects
+      // For annotate, args.records is already an array of 1-3 record objects
       const annotation: TextSpanAnnotation = {
         textSpan: args.textSpan,
-        annotations: args.annotations
+        records: args.records
       }
       console.log('Calling tool.execute with annotation:', annotation)
 

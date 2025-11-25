@@ -1,7 +1,7 @@
 [
   {
     "textSpan": "Synthesis vs discrete. Wants every silo to be parceled out. Compositor primitives over integrated wholes.",
-    "annotations": [
+    "records": [
       {
         "description": "The Bauhaus stage workshop (1921-29) treated the human body as a ‘compositor primitive’: basic geometric motions (leap, turn, fall) that could be re-assembled into new choreographic wholes. The school deliberately rejected the ‘integrated’ narrative ballet in favor of modular, re-mixable movement units—an early 20th-century rehearsal of the AI preference you describe.",
         "title": "The Theater of the Bauhaus",
@@ -20,7 +20,7 @@
   },
   {
     "textSpan": "Scaffolds vs surfaced. It wants semantic studs. It will fill in the rest.",
-    "annotations": [
+    "records": [
       {
         "description": "Medieval cathedral builders left ‘structural studs’—rough stone projections—so future masons could attach new chapels or spires without demolishing the existing fabric. The unfinished scaffolding was *meant* to be filled in later, a material analogue to the AI desire for ‘semantic studs’.",
         "title": "The Unfinished: Architecture and the Incomplete",
@@ -39,7 +39,7 @@
   },
   {
     "textSpan": "flat over hierarchical",
-    "annotations": [
+    "records": [
       {
         "description": "Mandaean cosmology pictures the universe as a flat mesh of ‘klila’ (garlands) rather than a vertical heaven-earth-hell stack. Salvation is lateral movement along the mesh, not ascent up a ladder—an ancient religious imaginaire that preempts the AI preference for flat addressability.",
         "title": "The Mandaeans: Ancient Texts and Modern People",
