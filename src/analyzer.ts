@@ -168,12 +168,11 @@ export class Analyzer {
         finishReason = response.finish_reason || null
 
         // Check if finish_reason indicates tool calls
-        if (finishReason === "tool_calls" && response.tool_calls && response.tool_calls.length > 0) {
+        if (finishReason === "tool_calls") {
           // Add assistant message with tool calls to messages
-          // Note: content can be null when making tool calls (as per Kimi's pattern)
           const assistantMessage = {
-            role: 'assistant' as const,
-            content: response.content || null,
+            role: 'assistant',
+            content: response.content,
             tool_calls: response.tool_calls
           }
           this.messages.push(assistantMessage)
@@ -181,12 +180,6 @@ export class Analyzer {
           // Execute tool calls
           const toolResponses: ToolResponse[] = []
           for (const toolCall of response.tool_calls) {
-            // Verify tool call structure matches expected format
-            if (!toolCall.id || !toolCall.function || !toolCall.function.name) {
-              console.error('Invalid tool call structure:', toolCall)
-              throw new Error('Invalid tool call structure received from LLM')
-            }
-
             const toolCallName = toolCall.function.name
             console.log(`Executing tool: ${toolCallName} with id: ${toolCall.id}`)
 
@@ -196,7 +189,7 @@ export class Analyzer {
             // The tool_call_id and name are required for Kimi to match the tool call correctly
             toolResponses.push({
               tool_call_id: toolCall.id,
-              role: 'tool' as const,
+              role: 'tool',
               name: toolCallName,
               content: JSON.stringify(result)
             })
@@ -214,7 +207,7 @@ export class Analyzer {
         // Add assistant response to messages
         if (response.content) {
           const finalMessage = {
-            role: 'assistant' as const,
+            role: 'assistant',
             content: response.content
           }
           this.messages.push(finalMessage)
@@ -246,7 +239,6 @@ export class Analyzer {
     }
 
     console.log(`Found tool: ${functionName}`, tool)
-    console.log(`Tool execute function:`, tool.execute)
 
     // Execute the tool with appropriate arguments
     if (functionName === 'annotate') {
@@ -257,11 +249,6 @@ export class Analyzer {
         records: args.records
       }
       console.log('Calling tool.execute with annotation:', annotation)
-
-      if (!tool.execute || typeof tool.execute !== 'function') {
-        console.error('Tool execute is not a function!', tool)
-        throw new Error(`Tool ${functionName} does not have a valid execute function`)
-      }
 
       try {
         tool.execute(annotation)
@@ -284,11 +271,6 @@ export class Analyzer {
         extensions: args.extensions // Already an array of strings
       }
       console.log('Calling tool.execute with listAnnotation:', listAnnotation)
-
-      if (!tool.execute || typeof tool.execute !== 'function') {
-        console.error('Tool execute is not a function!', tool)
-        throw new Error(`Tool ${functionName} does not have a valid execute function`)
-      }
 
       try {
         tool.execute(listAnnotation)

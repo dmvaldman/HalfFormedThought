@@ -12,14 +12,14 @@ export interface ToolCall {
 
 export interface ToolResponse {
   tool_call_id: string
-  role: 'tool'
+  role: string
   name: string
   content: string
 }
 
 export interface Message {
-  role: 'system' | 'user' | 'assistant' | 'tool'
-  content: string | null
+  role: string
+  content?: string
   tool_calls?: ToolCall[]
 }
 
