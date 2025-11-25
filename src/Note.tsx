@@ -360,45 +360,42 @@ class Note extends Component<NoteProps, NoteState> {
       const { textSpan, type } = annotation
       const index = content.indexOf(textSpan)
       if (index !== -1) {
-        let component: React.ReactElement
+        let notationType: string;
+        let notationColor: string;
+        let popupLabel: string;
+        let child: React.ReactElement;
 
         if (type === 'reference') {
           const refAnnotation = annotation as ReferenceAnnotation
-          component = (
-            <AnnotationPopup
-              key={`annotation-${keyCounter++}`}
-              textSpan={textSpan}
-              notationType="box"
-              notationColor="rgba(100, 100, 100, 0.55)"
-              isVisible={this.state.openAnnotationIndex === annotationIndex}
-              popupLabel="Annotations"
-              onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
-              onPopupClose={() => this.handleAnnotationPopupClose(annotationIndex)}
-              getPortalRoot={getPortalRoot}
-            >
-              <ReferenceAnnotationContent records={refAnnotation.records} />
-            </AnnotationPopup>
-          )
+          notationType = 'box'
+          notationColor = 'rgba(100, 100, 100, 0.55)'
+          popupLabel = 'Annotations'
+          child = <ReferenceAnnotationContent records={refAnnotation.records} />
         } else if (type === 'list') {
           const listAnnotation = annotation as ListAnnotation
-          component = (
-            <AnnotationPopup
-              key={`annotation-${keyCounter++}`}
-              textSpan={textSpan}
-              notationType="box"
-              notationColor="#ff4444"
-              isVisible={this.state.openAnnotationIndex === annotationIndex}
-              popupLabel="List Extensions"
-              onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
-              onPopupClose={() => this.handleAnnotationPopupClose(annotationIndex)}
-              getPortalRoot={getPortalRoot}
-            >
-              <ListAnnotationContent extensions={listAnnotation.extensions} />
-            </AnnotationPopup>
-          )
+          notationType = 'box'
+          notationColor = '#ff4444'
+          popupLabel = 'List Extensions'
+          child = <ListAnnotationContent extensions={listAnnotation.extensions} />
         } else {
           return // Skip unknown types
         }
+
+        let component = (
+          <AnnotationPopup
+            key={`annotation-${keyCounter++}`}
+            textSpan={textSpan}
+            notationType={notationType as 'box' | 'underline'}
+            notationColor={notationColor}
+            popupLabel={popupLabel}
+            isVisible={this.state.openAnnotationIndex === annotationIndex}
+            onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
+            onPopupClose={() => this.handleAnnotationPopupClose(annotationIndex)}
+            getPortalRoot={getPortalRoot}
+          >
+            {child}
+          </AnnotationPopup>
+        )
 
         spans.push({
           index,

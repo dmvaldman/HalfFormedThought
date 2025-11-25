@@ -4,7 +4,7 @@ import { RoughNotation } from 'react-rough-notation'
 
 export interface AnnotationPopupProps {
   textSpan: string
-  notationType: 'box' | 'underline'
+  notationType: string
   notationColor: string
   isVisible: boolean
   popupLabel: string
