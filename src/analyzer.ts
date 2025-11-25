@@ -1,4 +1,4 @@
-import { TextSpanAnnotation } from './types'
+import { ReferenceAnnotation, ListAnnotation } from './types'
 import { Message, llmService, LLMOptions, ToolCall, ToolResponse } from './LLMService'
 import mockAnnotations from './mock/mockAnnotations.json'
 
@@ -100,7 +100,7 @@ export class Analyzer {
       // For mock mode, find the annotate tool and call it with mock data
       const annotateTool = this.tools.find(t => t.function.name === 'annotate')
       if (annotateTool) {
-        const mockData = mockAnnotations as TextSpanAnnotation[]
+        const mockData = mockAnnotations as ReferenceAnnotation[]
         // Call execute for each annotation individually
         mockData.forEach(annotation => {
           annotateTool.execute(annotation)
@@ -251,7 +251,8 @@ export class Analyzer {
     // Execute the tool with appropriate arguments
     if (functionName === 'annotate') {
       // For annotate, args.records is already an array of 1-3 record objects
-      const annotation: TextSpanAnnotation = {
+      const annotation: ReferenceAnnotation = {
+        type: 'reference',
         textSpan: args.textSpan,
         records: args.records
       }
@@ -275,6 +276,29 @@ export class Analyzer {
       // For getNoteContent, call execute with no arguments
       const content = tool.execute()
       return { content }
+    } else if (functionName === 'extendList') {
+      // For extendList, create ListAnnotation object
+      const listAnnotation: ListAnnotation = {
+        type: 'list',
+        textSpan: args.textSpan,
+        extensions: args.extensions // Already an array of strings
+      }
+      console.log('Calling tool.execute with listAnnotation:', listAnnotation)
+
+      if (!tool.execute || typeof tool.execute !== 'function') {
+        console.error('Tool execute is not a function!', tool)
+        throw new Error(`Tool ${functionName} does not have a valid execute function`)
+      }
+
+      try {
+        tool.execute(listAnnotation)
+        console.log('tool.execute completed')
+      } catch (error) {
+        console.error('Error executing tool:', error)
+        throw error
+      }
+
+      return { success: true, message: 'List extension added' }
     } else {
       // For other tools, call execute with args
       return tool.execute(args)

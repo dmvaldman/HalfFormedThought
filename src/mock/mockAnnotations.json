@@ -1,5 +1,6 @@
 [
   {
+    "type": "reference",
     "textSpan": "Synthesis vs discrete. Wants every silo to be parceled out. Compositor primitives over integrated wholes.",
     "records": [
       {
@@ -19,6 +20,7 @@
     ]
   },
   {
+    "type": "reference",
     "textSpan": "Scaffolds vs surfaced. It wants semantic studs. It will fill in the rest.",
     "records": [
       {
@@ -38,6 +40,7 @@
     ]
   },
   {
+    "type": "reference",
     "textSpan": "flat over hierarchical",
     "records": [
       {

@@ -1,9 +1,11 @@
 import React, { Component } from 'react'
-import { NoteType, TextSpanAnnotation } from './types'
+import { NoteType, Annotation, ReferenceAnnotation, ListAnnotation } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer, Tool } from './analyzer'
-import Annotation from './Annotation'
+import { AnnotationPopup } from './AnnotationPopup'
+import ReferenceAnnotationContent from './ReferenceAnnotation'
+import ListAnnotationContent from './ListAnnotation'
 
 // Tool definitions
 const ANNOTATE_TOOL = {
@@ -69,6 +71,33 @@ const GET_NOTE_CONTENT_TOOL = {
   }
 }
 
+const EXTEND_LIST_TOOL = {
+  type: 'function' as const,
+  function: {
+    name: 'extendList',
+    description: 'Extend a list in the document by adding more entries. Lists can be identified by repeated use of "and/or" conjunctions or by literal bulletpointed lists with dashes. Provide 1-4 additional entries that extend the list in a meaningful way.',
+    parameters: {
+      type: 'object',
+      properties: {
+        textSpan: {
+          type: 'string',
+          description: 'The exact span of text containing the list to extend. Must be an exact string match to the content (no "...", correcting spelling/punctuation or starting/ending with punctuation/whitespace).'
+        },
+        extensions: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 4,
+          description: 'Array of 1-4 string entries that extend the list',
+          items: {
+            type: 'string'
+          }
+        }
+      },
+      required: ['textSpan', 'extensions']
+    }
+  }
+}
+
 interface NoteProps {
   note: NoteType
   onUpdateTitle: (noteId: string, title: string) => void
@@ -76,7 +105,7 @@ interface NoteProps {
 }
 
 interface NoteState {
-  annotations: TextSpanAnnotation[]
+  annotations: Annotation[]
   openAnnotationIndex: number | null
   content: string
   isAnalyzing: boolean
@@ -104,10 +133,14 @@ class Note extends Component<NoteProps, NoteState> {
         ...ANNOTATE_TOOL,
         execute: this.onAnnotate.bind(this)
       },
-      // {
-      //   ...GET_NOTE_CONTENT_TOOL,
-      //   execute: this.getNoteContent.bind(this)
-      // }
+      {
+        ...GET_NOTE_CONTENT_TOOL,
+        execute: this.getNoteContent.bind(this)
+      },
+      {
+        ...EXTEND_LIST_TOOL,
+        execute: this.onExtendList.bind(this)
+      }
     ]
 
     // Initialize analyzer for this note with tools
@@ -118,7 +151,7 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   // Tool method for Kimi to call when it wants to annotate text spans
-  private onAnnotate = (annotation: TextSpanAnnotation) => {
+  private onAnnotate = (annotation: ReferenceAnnotation) => {
     if (annotation) {
       // strip punctuation/whitespace from the start and end of the text span
       annotation.textSpan = annotation.textSpan.trim()
@@ -127,8 +160,8 @@ class Note extends Component<NoteProps, NoteState> {
       annotation.textSpan = annotation.textSpan.replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
 
       console.log('onAnnotate called with text span:', annotation.textSpan)
-      // Add the new annotations to the existing annotations
-      const newAnnotations = [...this.state.annotations, annotation]
+      // Add the new annotation to the existing annotations
+      const newAnnotations: Annotation[] = [...this.state.annotations, annotation]
       this.setState({ annotations: newAnnotations })
     }
   }
@@ -136,6 +169,21 @@ class Note extends Component<NoteProps, NoteState> {
   // Tool method for Kimi to get the current note content
   private getNoteContent = (): string => {
     return this.getContent()
+  }
+
+  // Tool method for Kimi to call when it wants to extend a list
+  private onExtendList = (listAnnotation: ListAnnotation) => {
+    if (listAnnotation && listAnnotation.extensions && listAnnotation.extensions.length > 0) {
+      // strip punctuation/whitespace from the start and end of the text span
+      listAnnotation.textSpan = listAnnotation.textSpan.trim()
+      // remove leading/trailing punctuation/whitespace
+      listAnnotation.textSpan = listAnnotation.textSpan.replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+
+      console.log('onExtendList called with text span:', listAnnotation.textSpan, 'extensions:', listAnnotation.extensions)
+      // Add the new list annotation to the existing annotations
+      const newAnnotations: Annotation[] = [...this.state.annotations, listAnnotation]
+      this.setState({ annotations: newAnnotations })
+    }
   }
 
   componentDidMount() {
@@ -282,6 +330,7 @@ class Note extends Component<NoteProps, NoteState> {
     }
   }
 
+
   handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     // const pastedText = e.clipboardData.getData('text/plain')
     // console.log('Pasted content:', pastedText)
@@ -296,39 +345,89 @@ class Note extends Component<NoteProps, NoteState> {
     }
     const getPortalRoot = () => this.annotationLayerRef.current
 
-    // Build array of text segments and annotation components
-    const segments: (string | React.ReactElement)[] = []
-    let lastIndex = 0
+    // Combine all annotations, sort by position
+    interface SpanItem {
+      index: number
+      textSpan: string
+      component: React.ReactElement
+    }
 
-    this.state.annotations.forEach((textSpanAnnotation, annotationIndex) => {
-      const { textSpan, records } = textSpanAnnotation
-      const index = content.indexOf(textSpan, lastIndex)
+    const spans: SpanItem[] = []
+    let keyCounter = 0
 
+    // Process all annotations (both reference and list)
+    this.state.annotations.forEach((annotation, annotationIndex) => {
+      const { textSpan, type } = annotation
+      const index = content.indexOf(textSpan)
       if (index !== -1) {
-        // Add text before the annotation
-        if (index > lastIndex) {
-          segments.push(content.substring(lastIndex, index))
+        let component: React.ReactElement
+
+        if (type === 'reference') {
+          const refAnnotation = annotation as ReferenceAnnotation
+          component = (
+            <AnnotationPopup
+              key={`annotation-${keyCounter++}`}
+              textSpan={textSpan}
+              notationType="box"
+              notationColor="rgba(100, 100, 100, 0.55)"
+              isVisible={this.state.openAnnotationIndex === annotationIndex}
+              popupLabel="Annotations"
+              onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
+              onPopupClose={() => this.handleAnnotationPopupClose(annotationIndex)}
+              getPortalRoot={getPortalRoot}
+            >
+              <ReferenceAnnotationContent records={refAnnotation.records} />
+            </AnnotationPopup>
+          )
+        } else if (type === 'list') {
+          const listAnnotation = annotation as ListAnnotation
+          component = (
+            <AnnotationPopup
+              key={`annotation-${keyCounter++}`}
+              textSpan={textSpan}
+              notationType="box"
+              notationColor="#ff4444"
+              isVisible={this.state.openAnnotationIndex === annotationIndex}
+              popupLabel="List Extensions"
+              onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
+              onPopupClose={() => this.handleAnnotationPopupClose(annotationIndex)}
+              getPortalRoot={getPortalRoot}
+            >
+              <ListAnnotationContent extensions={listAnnotation.extensions} />
+            </AnnotationPopup>
+          )
+        } else {
+          return // Skip unknown types
         }
 
-        // Add the annotation component wrapping the text span
-        segments.push(
-          <Annotation
-            key={annotationIndex}
-            textSpan={textSpan}
-            records={records}
-            isVisible={this.state.openAnnotationIndex === annotationIndex}
-            annotationId={annotationIndex}
-            onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
-            onPopupClose={this.handleAnnotationPopupClose}
-            getPortalRoot={getPortalRoot}
-          />
-        )
-
-        lastIndex = index + textSpan.length
+        spans.push({
+          index,
+          textSpan,
+          component
+        })
       }
     })
 
-    // Add remaining text
+    // Sort by position in content
+    spans.sort((a, b) => a.index - b.index)
+
+    // Build array of text segments and components
+    const segments: (string | React.ReactElement)[] = []
+    let lastIndex = 0
+
+    spans.forEach((span) => {
+      // Add text before the span
+      if (span.index > lastIndex) {
+        segments.push(content.substring(lastIndex, span.index))
+      }
+
+      // Add the component
+      segments.push(span.component)
+
+      lastIndex = span.index + span.textSpan.length
+    })
+
+    // Add remaining text after last span
     if (lastIndex < content.length) {
       segments.push(content.substring(lastIndex))
     }
