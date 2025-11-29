@@ -89,6 +89,14 @@ class App extends Component<{}, AppState> {
     const { notes, currentNoteId } = this.state
     const currentNote = notes.find((note) => note.id === currentNoteId) || null
 
+    let emptyText = ''
+    if (!currentNote && notes.length === 0) {
+      emptyText = 'Create your first note'
+    }
+    else if (!currentNote) {
+      emptyText = 'Select a note to edit'
+    }
+
     return (
       <div className="app">
         <Sidebar
@@ -108,7 +116,7 @@ class App extends Component<{}, AppState> {
         )}
         {!currentNote && (
           <div className="editor-empty">
-            <p>Select a note or create a new one</p>
+            <p>{emptyText}</p>
           </div>
         )}
       </div>
