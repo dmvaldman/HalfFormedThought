@@ -329,6 +329,56 @@ class Note extends Component<NoteProps, NoteState> {
     }
   }
 
+  handleDeleteAnnotation = (index: number) => {
+    const newAnnotations = this.state.annotations.filter((_, i) => i !== index)
+    this.setState({
+      annotations: newAnnotations,
+      openAnnotationIndex: null // Close popup if deleting the open one
+    })
+  }
+
+  handleDeleteRecord = (annotationIndex: number, recordIndex: number) => {
+    const annotation = this.state.annotations[annotationIndex]
+    if (annotation.type === 'reference') {
+      const refAnnotation = annotation as ReferenceAnnotation
+      const newRecords = refAnnotation.records.filter((_, i) => i !== recordIndex)
+      if (newRecords.length === 0) {
+        // If no records left, delete the entire annotation
+        this.handleDeleteAnnotation(annotationIndex)
+      } else {
+        // Update the annotation with remaining records
+        const updatedAnnotation: ReferenceAnnotation = {
+          ...refAnnotation,
+          records: newRecords
+        }
+        const newAnnotations = [...this.state.annotations]
+        newAnnotations[annotationIndex] = updatedAnnotation
+        this.setState({ annotations: newAnnotations })
+      }
+    }
+  }
+
+  handleDeleteExtension = (annotationIndex: number, extensionIndex: number) => {
+    const annotation = this.state.annotations[annotationIndex]
+    if (annotation.type === 'list') {
+      const listAnnotation = annotation as ListAnnotation
+      const newExtensions = listAnnotation.extensions.filter((_, i) => i !== extensionIndex)
+      if (newExtensions.length === 0) {
+        // If no extensions left, delete the entire annotation
+        this.handleDeleteAnnotation(annotationIndex)
+      } else {
+        // Update the annotation with remaining extensions
+        const updatedAnnotation: ListAnnotation = {
+          ...listAnnotation,
+          extensions: newExtensions
+        }
+        const newAnnotations = [...this.state.annotations]
+        newAnnotations[annotationIndex] = updatedAnnotation
+        this.setState({ annotations: newAnnotations })
+      }
+    }
+  }
+
 
   handlePaste = (e: React.ClipboardEvent<HTMLDivElement>) => {
     // const pastedText = e.clipboardData.getData('text/plain')
@@ -369,13 +419,23 @@ class Note extends Component<NoteProps, NoteState> {
           notationType = 'box'
           notationColor = 'rgba(100, 100, 100, 0.55)'
           popupLabel = 'Annotations'
-          child = <ReferenceAnnotationContent records={refAnnotation.records} />
+          child = (
+            <ReferenceAnnotationContent
+              records={refAnnotation.records}
+              onDeleteRecord={(recordIndex) => this.handleDeleteRecord(annotationIndex, recordIndex)}
+            />
+          )
         } else if (type === 'list') {
           const listAnnotation = annotation as ListAnnotation
           notationType = 'box'
           notationColor = '#ff4444'
           popupLabel = 'List Extensions'
-          child = <ListAnnotationContent extensions={listAnnotation.extensions} />
+          child = (
+            <ListAnnotationContent
+              extensions={listAnnotation.extensions}
+              onDeleteExtension={(extensionIndex) => this.handleDeleteExtension(annotationIndex, extensionIndex)}
+            />
+          )
         } else {
           return // Skip unknown types
         }

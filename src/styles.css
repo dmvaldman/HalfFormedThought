@@ -427,12 +427,17 @@ button {
 
 .annotation-item {
   margin-bottom: 12px;
+  position: relative;
 }
 
 .annotation-item + .annotation-item {
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid var(--dark-gray);
+}
+
+.annotation-item:hover .annotation-item-delete-button {
+  opacity: 1;
 }
 
 .annotation-title {
@@ -464,4 +469,34 @@ button {
   font-size: 11px;
   color: var(--medium-gray);
   margin-bottom: 4px;
+}
+
+.annotation-item-delete-button {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: var(--black);
+  border: none;
+  border-radius: 50%;
+  color: var(--white-pure);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.annotation-item-delete-button:hover {
+  opacity: 1;
+}
+
+.annotation-item-delete-button svg {
+  width: 12px;
+  height: 12px;
+  stroke: var(--white-pure);
 }
