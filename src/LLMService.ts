@@ -26,7 +26,7 @@ export interface Message {
 export interface LLMOptions {
   temperature?: number
   response_format?: any
-  reasoning_effort?: string
+  reasoning_effort?: 'medium' | 'high' | 'low'
   tools?: any[]
   [key: string]: any // Allow additional LLM-specific options
 }

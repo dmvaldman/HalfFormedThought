@@ -6,7 +6,7 @@ const MOCK = import.meta.env.VITE_MOCK === 'true'
 
 // Tool type definition
 export interface Tool {
-  type: 'function'
+  type: string
   function: {
     name: string
     description: string

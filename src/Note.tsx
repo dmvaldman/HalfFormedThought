@@ -9,7 +9,7 @@ import ListAnnotationContent from './ListAnnotation'
 
 // Tool definitions
 const ANNOTATE_TOOL = {
-  type: 'function' as const,
+  type: 'function',
   function: {
     name: 'annotate',
     description: 'Annotate a text span with research sources and insights. Call this tool multiple times to annotate different text spans. Each call should annotate one text span.',
@@ -59,20 +59,19 @@ const ANNOTATE_TOOL = {
 }
 
 const GET_NOTE_CONTENT_TOOL = {
-  type: 'function' as const,
+  type: 'function',
   function: {
     name: 'getNoteContent',
     description: 'Get the full current content of the note. Use this when you need to see the complete text to understand context or find exact text spans.',
     parameters: {
       type: 'object',
       properties: {},
-      required: []
     }
   }
 }
 
 const EXTEND_LIST_TOOL = {
-  type: 'function' as const,
+  type: 'function',
   function: {
     name: 'extendList',
     description: 'Extend a list in the document by adding more entries. Lists can be identified by repeated use of "and/or" conjunctions or by literal bulletpointed lists with dashes. Provide 1-4 additional entries that extend the list in a meaningful way.',
