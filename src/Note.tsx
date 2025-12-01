@@ -1,11 +1,74 @@
 import React, { Component } from 'react'
-import { NoteType, Annotation, ReferenceAnnotation, ListAnnotation } from './types'
+import { EditorContent, useEditor, Editor as TiptapEditor } from '@tiptap/react'
+import StarterKit from '@tiptap/starter-kit'
+import { AnnotationMark } from './AnnotationMark'
+import { NoteType, Annotation, ReferenceAnnotation, ListAnnotation, TextSpanAnnotation } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer, Tool } from './analyzer'
 import { AnnotationPopup } from './AnnotationPopup'
 import ReferenceAnnotationContent from './ReferenceAnnotation'
 import ListAnnotationContent from './ListAnnotation'
+
+// TipTap Editor Wrapper Component (functional component to use hooks)
+interface TipTapEditorWrapperProps {
+  initialContent: string
+  onEditorReady: (editor: TiptapEditor) => void
+  onUpdate: () => void
+  onMarkClick?: (annotationId: string, position: { top: number; left: number }) => void
+}
+
+const TipTapEditorWrapper: React.FC<TipTapEditorWrapperProps> = ({ initialContent, onEditorReady, onUpdate, onMarkClick }) => {
+  const editor = useEditor({
+    extensions: [StarterKit, AnnotationMark],
+    content: initialContent,
+    onUpdate: () => {
+      onUpdate()
+    },
+    editorProps: {
+      attributes: {
+        class: 'editor-content',
+      },
+      handleClick: (view, pos, event) => {
+        // Use DOM to find the clicked mark element - more reliable than position-based API
+        const target = event.target as HTMLElement
+        const markElement = target.closest('span[data-annotation-id]') as HTMLElement | null
+
+        if (markElement && onMarkClick) {
+          const annotationId = markElement.getAttribute('data-annotation-id')
+          if (!annotationId) return false
+
+          // Get the bounding rect of the mark element
+          const rect = markElement.getBoundingClientRect()
+          const editorElement = view.dom as HTMLElement
+          const editorRect = editorElement.getBoundingClientRect()
+
+          // Calculate position relative to editor
+          const position = {
+            top: rect.bottom - editorRect.top + 8, // Below the text
+            left: rect.left - editorRect.left
+          }
+
+          onMarkClick(annotationId, position)
+
+          // Return true to indicate we handled the click
+          return true
+        }
+
+        // Return false to allow default behavior
+        return false
+      },
+    },
+  })
+
+  React.useEffect(() => {
+    if (editor) {
+      onEditorReady(editor)
+    }
+  }, [editor, onEditorReady])
+
+  return editor ? <EditorContent editor={editor} /> : null
+}
 
 // Tool definitions
 const ANNOTATE_TOOL = {
@@ -101,27 +164,31 @@ interface NoteProps {
   note: NoteType
   onUpdateTitle: (noteId: string, title: string) => void
   onUpdateContent: (noteId: string, content: string) => void
+  onUpdateAnnotations?: (noteId: string, annotations: TextSpanAnnotation[]) => void
 }
 
 interface NoteState {
-  annotations: Annotation[]
-  openAnnotationIndex: number | null
+  annotationsVersion: number // Increment to trigger re-render when annotations change
+  openAnnotationId: string | null
+  popupPosition: { top: number; left: number } | null
   content: string
   isAnalyzing: boolean
 }
 
 class Note extends Component<NoteProps, NoteState> {
-  private contentEditableRef = React.createRef<HTMLDivElement>()
   private annotationLayerRef = React.createRef<HTMLDivElement>()
   private initialContent: string = ''
   private analyzer: Analyzer
   private debouncedContentLogger: () => void
+  private editor: TiptapEditor | null = null
+  private annotations: Map<string, TextSpanAnnotation> = new Map() // Single source of truth for annotations
 
   constructor(props: NoteProps) {
     super(props)
     this.state = {
-      annotations: [],
-      openAnnotationIndex: null,
+      annotationsVersion: 0,
+      openAnnotationId: null,
+      popupPosition: null,
       content: props.note.content || '',
       isAnalyzing: false
     }
@@ -149,62 +216,229 @@ class Note extends Component<NoteProps, NoteState> {
     this.debouncedContentLogger = debounce(this.contentLogger.bind(this), 2000)
   }
 
-  // Tool method for Kimi to call when it wants to annotate text spans
-  private onAnnotate = (annotation: ReferenceAnnotation) => {
-    if (annotation) {
-      // strip punctuation/whitespace from the start and end of the text span
-      annotation.textSpan = annotation.textSpan.trim()
-      // remove leading/trailing punctuation/whitespace
-      // hack because for some reason Kimi always starts with this
-      annotation.textSpan = annotation.textSpan.replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+  // Find textSpan in editor and return selection range
+  private findTextSpan(textSpan: string): { from: number; to: number } | null {
+    if (!this.editor) return null
 
-      console.log('onAnnotate called with text span:', annotation.textSpan)
-      // Add the new annotation to the existing annotations
-      const newAnnotations: Annotation[] = [...this.state.annotations, annotation]
-      this.setState({ annotations: newAnnotations })
+    const content = this.editor.state.doc.textContent
+    const index = content.indexOf(textSpan)
+
+    if (index === -1) return null
+
+    // Convert character index to ProseMirror positions
+    let from: number | null = null
+    let to: number | null = null
+    let currentPos = 0
+
+    this.editor.state.doc.descendants((node, pos) => {
+      if (node.isText) {
+        const nodeText = node.text || ''
+        const nodeStart = currentPos
+        const nodeEnd = currentPos + nodeText.length
+
+        if (index >= nodeStart && index < nodeEnd) {
+          from = pos + (index - nodeStart)
+        }
+        if (index + textSpan.length > nodeStart && index + textSpan.length <= nodeEnd) {
+          to = pos + (index + textSpan.length - nodeStart)
+        }
+
+        currentPos = nodeEnd
+      }
+      return true
+    })
+
+    // Validate that we found both positions
+    if (from === null || to === null || from >= to) {
+      console.warn('Failed to calculate ProseMirror positions for textSpan:', textSpan)
+      return null
+    }
+
+    return { from, to }
+  }
+
+  // Tool method for Kimi to call when it wants to annotate text spans
+  private onAnnotate = (annotation: any) => {
+    if (annotation && annotation.textSpan && this.editor) {
+      // Clean the textSpan
+      const textSpan = annotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+
+      // Find textSpan in editor
+      const range = this.findTextSpan(textSpan)
+      if (!range) {
+        console.warn('Could not find textSpan in editor:', textSpan)
+        return
+      }
+
+      // Generate unique ID for this annotation
+      const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+      // Apply mark to the text span
+      this.editor.chain()
+        .setTextSelection({ from: range.from, to: range.to })
+        .setMark('annotation', {
+          annotationId,
+          type: 'reference'
+        })
+        .setTextSelection(range.to) // Clear selection
+        .run()
+
+      // Store annotation data + text span
+      const newAnnotation: ReferenceAnnotation = {
+        type: 'reference',
+        records: annotation.records
+      }
+
+      const annotationEntry: TextSpanAnnotation = {
+        annotationId,
+        textSpan,
+        annotation: newAnnotation
+      }
+
+      // Add to annotations map stored as class property (not React state)
+      // This avoids React's async setState batching issues
+      console.log('onAnnotate: Adding annotation:', annotationId)
+      // Add to annotations map (single source of truth)
+      this.annotations.set(annotationId, annotationEntry)
+
+      // Trigger re-render and save
+      this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }), () => {
+        this.saveAnnotations()
+      })
     }
   }
 
   // Tool method for Kimi to get the current note content
   private getNoteContent = (): string => {
-    return this.getContent()
+    if (this.editor) {
+      return this.editor.getText()
+    }
+    return ''
   }
 
   // Tool method for Kimi to call when it wants to extend a list
-  private onExtendList = (listAnnotation: ListAnnotation) => {
-    if (listAnnotation && listAnnotation.extensions && listAnnotation.extensions.length > 0) {
-      // strip punctuation/whitespace from the start and end of the text span
-      listAnnotation.textSpan = listAnnotation.textSpan.trim()
-      // remove leading/trailing punctuation/whitespace
-      listAnnotation.textSpan = listAnnotation.textSpan.replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+  private onExtendList = (listAnnotation: any) => {
+    if (listAnnotation && listAnnotation.extensions && listAnnotation.extensions.length > 0 && listAnnotation.textSpan && this.editor) {
+      // Clean the textSpan
+      const textSpan = listAnnotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
 
-      console.log('onExtendList called with text span:', listAnnotation.textSpan, 'extensions:', listAnnotation.extensions)
-      // Add the new list annotation to the existing annotations
-      const newAnnotations: Annotation[] = [...this.state.annotations, listAnnotation]
-      this.setState({ annotations: newAnnotations })
+      // Find textSpan in editor
+      const range = this.findTextSpan(textSpan)
+      if (!range) {
+        console.warn('Could not find textSpan in editor:', textSpan)
+        return
+      }
+
+      // Generate unique ID for this annotation
+      const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+      // Apply mark to the text span
+      this.editor.chain()
+        .setTextSelection({ from: range.from, to: range.to })
+        .setMark('annotation', {
+          annotationId,
+          type: 'list'
+        })
+        .setTextSelection(range.to) // Clear selection
+        .run()
+
+      // Store annotation data + text span
+      const newAnnotation: ListAnnotation = {
+        type: 'list',
+        extensions: listAnnotation.extensions
+      }
+
+      const annotationEntry: TextSpanAnnotation = {
+        annotationId,
+        textSpan,
+        annotation: newAnnotation
+      }
+
+      // Add to annotations map (single source of truth)
+      this.annotations.set(annotationId, annotationEntry)
+
+      // Trigger re-render and save
+      this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }), () => {
+        this.saveAnnotations()
+      })
     }
+  }
+
+  // Load annotations from stored note data and reapply marks
+  private loadAnnotations() {
+    if (!this.editor) {
+      return
+    }
+
+    // Clear existing annotations
+    this.annotations.clear()
+
+    if (!this.props.note.annotations || this.props.note.annotations.length === 0) {
+      this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }))
+      return
+    }
+
+    this.props.note.annotations.forEach(storedAnnotation => {
+      const { annotationId, textSpan, annotation } = storedAnnotation
+
+      const range = this.findTextSpan(textSpan)
+      if (!range) {
+        console.warn('Could not find textSpan when loading annotation:', textSpan)
+        return
+      }
+
+      this.editor!.chain()
+        .setTextSelection({ from: range.from, to: range.to })
+        .setMark('annotation', {
+          annotationId,
+          type: annotation.type
+        })
+        .setTextSelection(range.to)
+        .run()
+
+      const actualTextSpan = this.editor!.state.doc.textBetween(range.from, range.to)
+
+      this.annotations.set(annotationId, {
+        annotationId,
+        textSpan: actualTextSpan,
+        annotation
+      })
+    })
+
+    this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }))
   }
 
   componentDidMount() {
-    // Set initial content when component mounts
-    if (this.contentEditableRef.current) {
-      const initial = this.props.note.content || ''
-      this.setContent(initial)
-      this.initialContent = initial
-    }
+    const initial = this.props.note.content || ''
+    this.initialContent = initial
   }
 
   componentDidUpdate(prevProps: NoteProps) {
-    // If we switched notes, reset content + annotations and rehydrate the editor
     if (prevProps.note.id !== this.props.note.id) {
       const initial = this.props.note.content || ''
       this.setContent(initial)
       this.initialContent = initial
+      this.annotations.clear()
       this.setState({
         content: initial,
-        annotations: [],
-        openAnnotationIndex: null
+        annotationsVersion: this.state.annotationsVersion + 1,
+        openAnnotationId: null,
+        popupPosition: null,
+        isAnalyzing: false
       })
+
+      if (this.editor) {
+        setTimeout(() => this.loadAnnotations(), 0)
+      }
+      return
+    }
+
+    if (
+      this.editor &&
+      this.props.note.annotations &&
+      prevProps.note.annotations !== this.props.note.annotations
+    ) {
+      setTimeout(() => this.loadAnnotations(), 0)
     }
   }
 
@@ -212,41 +446,24 @@ class Note extends Component<NoteProps, NoteState> {
     // Avoid rerendering the contentEditable on each keystroke; only rerender when
     // note identity changes or annotation-related state changes.
     if (nextProps.note.id !== this.props.note.id) return true
-    if (nextState.annotations !== this.state.annotations) return true
-    if (nextState.openAnnotationIndex !== this.state.openAnnotationIndex) return true
+    if (nextProps.note.annotations !== this.props.note.annotations) return true
+    if (nextState.annotationsVersion !== this.state.annotationsVersion) return true
+    if (nextState.openAnnotationId !== this.state.openAnnotationId) return true
     if (nextState.content !== this.state.content) return true
     if (nextState.isAnalyzing !== this.state.isAnalyzing) return true
     return false
   }
 
   getContent(): string {
-    const root = this.contentEditableRef.current
-    if (!root) return ''
-
-    let result = ''
-
-    root.childNodes.forEach(node => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        result += node.textContent ?? ''
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        const el = node as HTMLElement
-        if (el.tagName === 'BR') {
-          result += '\n'
-        } else if (el.tagName === 'DIV' || el.tagName === 'P') {
-          // text inside the block
-          result += (el.textContent ?? '')
-          // block break = newline, even for <div><br></div>
-          result += '\n'
-        }
-      }
-    })
-
-    return result.trim()
+    if (this.editor) {
+      return this.editor.state.doc.textContent
+    }
+    return ''
   }
 
   setContent(content: string) {
-    if (this.contentEditableRef.current) {
-      this.contentEditableRef.current.innerText = content
+    if (this.editor) {
+      this.editor.commands.setContent(content)
     }
   }
 
@@ -276,9 +493,8 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   private contentLogger = async () => {
-    if (!this.contentEditableRef.current) return
+    if (!this.editor) return
 
-    console.log('Pause detected')
 
     const currentContent = this.getContent()
     if (currentContent !== this.initialContent) {
@@ -302,16 +518,172 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   handleContentChange = () => {
-    if (!this.contentEditableRef.current) return
+    if (!this.editor) return
 
     const content = this.getContent()
+    const contentChanged = content !== this.state.content
+
     this.setState({ content })
 
-    // Call the debounced logger (will log after 2 seconds of inactivity)
-    this.debouncedContentLogger()
+    // Save annotations
+    this.saveAnnotations()
 
-    // Still update immediately (for saving)
-    this.props.onUpdateContent(this.props.note.id, content)
+    // Only trigger the analysis logger if actual text content changed (not just marks)
+    if (contentChanged) {
+      // Call the debounced logger (will log after 2 seconds of inactivity)
+      this.debouncedContentLogger()
+
+      // Still update immediately (for saving)
+      this.props.onUpdateContent(this.props.note.id, content)
+    }
+  }
+
+  // Save annotations to parent (will be stored with note)
+  private saveAnnotations() {
+    if (!this.editor || !this.props.onUpdateAnnotations) return
+
+    const storedAnnotations: TextSpanAnnotation[] = []
+    const processedIds = new Set<string>()
+    // DON'T update state here - just save to parent
+    // The state is already updated by onAnnotate/onExtendList
+
+    // Extract annotations from marks and current text content
+    // We need to find the full text span for each annotation (marks can span multiple nodes)
+    this.editor.state.doc.descendants((node, pos) => {
+      if (node.isText && node.marks) {
+        node.marks.forEach(mark => {
+          if (mark.type.name === 'annotation' && mark.attrs.annotationId) {
+            const annotationId = mark.attrs.annotationId
+            const annotationEntry = this.annotations.get(annotationId)
+
+            if (!processedIds.has(annotationId)) {
+              // Find the full range of this mark
+              let from = pos
+              let to = pos + node.nodeSize
+
+              // Look ahead to find contiguous nodes with the same mark
+              let currentPos = pos + node.nodeSize
+              this.editor!.state.doc.nodesBetween(currentPos, this.editor!.state.doc.content.size, (nextNode, nextPos) => {
+                if (nextNode.isText && nextNode.marks) {
+                  const hasSameMark = nextNode.marks.some(m =>
+                    m.type.name === 'annotation' && m.attrs.annotationId === annotationId
+                  )
+                  if (hasSameMark) {
+                    to = nextPos + nextNode.nodeSize
+                    return false // Continue searching
+                  }
+                }
+                return true // Stop searching
+              })
+
+              // Get the full text span
+              const textSpan = this.editor!.state.doc.textBetween(from, to)
+
+              // Get annotation data from state if available
+              const annotationEntry = this.annotations.get(annotationId)
+              if (annotationEntry) {
+                const serializedEntry: TextSpanAnnotation = {
+                  annotationId,
+                  textSpan,
+                  annotation: annotationEntry.annotation
+                }
+
+                storedAnnotations.push(serializedEntry)
+              }
+
+              processedIds.add(annotationId)
+            }
+          }
+        })
+      }
+      return true
+    })
+
+    // Compare with existing annotations to see if anything changed
+    if (this.annotationsHaveChanged(storedAnnotations)) {
+      // Update parent with annotations only if they changed
+      this.props.onUpdateAnnotations(this.props.note.id, storedAnnotations)
+    }
+  }
+
+  // Compare current annotations with stored ones to detect changes
+  private annotationsHaveChanged(currentAnnotations: TextSpanAnnotation[]): boolean {
+    const storedAnnotations = this.props.note.annotations || []
+
+    // Quick check: different number of annotations means change
+    if (currentAnnotations.length !== storedAnnotations.length) {
+      return true
+    }
+
+    // Create maps for easier comparison
+    const currentMap = new Map(currentAnnotations.map(a => [a.annotationId, a]))
+    const storedMap = new Map(storedAnnotations.map(a => [a.annotationId, a]))
+
+    // Check if any annotation IDs were added or removed
+    for (const id of currentMap.keys()) {
+      if (!storedMap.has(id)) {
+        return true // New annotation added
+      }
+    }
+    for (const id of storedMap.keys()) {
+      if (!currentMap.has(id)) {
+        return true // Annotation removed
+      }
+    }
+
+    // Check if any annotation data changed (same ID but different content)
+    for (const [id, current] of currentMap) {
+      const stored = storedMap.get(id)
+      if (!stored) continue
+
+      // Compare textSpan
+      if (current.textSpan !== stored.textSpan) {
+        return true
+      }
+
+      // Compare annotation data
+      if (current.annotation.type !== stored.annotation.type) {
+        return true
+      }
+
+      if (current.annotation.type === 'reference' && stored.annotation.type === 'reference') {
+        const currentRef = current.annotation as ReferenceAnnotation
+        const storedRef = stored.annotation as ReferenceAnnotation
+
+        // Compare records arrays
+        if (currentRef.records.length !== storedRef.records.length) {
+          return true
+        }
+
+        // Deep compare records
+        for (let i = 0; i < currentRef.records.length; i++) {
+          const currentRecord = currentRef.records[i]
+          const storedRecord = storedRef.records[i]
+
+          if (JSON.stringify(currentRecord) !== JSON.stringify(storedRecord)) {
+            return true
+          }
+        }
+      } else if (current.annotation.type === 'list' && stored.annotation.type === 'list') {
+        const currentList = current.annotation as ListAnnotation
+        const storedList = stored.annotation as ListAnnotation
+
+        // Compare extensions arrays
+        if (currentList.extensions.length !== storedList.extensions.length) {
+          return true
+        }
+
+        // Compare extension strings
+        for (let i = 0; i < currentList.extensions.length; i++) {
+          if (currentList.extensions[i] !== storedList.extensions[i]) {
+            return true
+          }
+        }
+      }
+    }
+
+    // No changes detected
+    return false
   }
 
   handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -319,62 +691,99 @@ class Note extends Component<NoteProps, NoteState> {
     this.props.onUpdateTitle(this.props.note.id, title)
   }
 
-  handleAnnotationPopupOpen = (index: number) => {
-    this.setState({ openAnnotationIndex: index })
+  handleAnnotationPopupOpen = (annotationId: string) => {
+    this.setState({ openAnnotationId: annotationId })
   }
 
-  handleAnnotationPopupClose = (index: number) => {
-    if (this.state.openAnnotationIndex === index) {
-      this.setState({ openAnnotationIndex: null })
+  handleAnnotationPopupClose = (annotationId: string) => {
+    if (this.state.openAnnotationId === annotationId) {
+      this.setState({ openAnnotationId: null, popupPosition: null })
     }
   }
 
-  handleDeleteAnnotation = (index: number) => {
-    const newAnnotations = this.state.annotations.filter((_, i) => i !== index)
-    this.setState({
-      annotations: newAnnotations,
-      openAnnotationIndex: null // Close popup if deleting the open one
-    })
+  handleMarkClick = (annotationId: string, position: { top: number; left: number }) => {
+    // Toggle popup visibility
+    if (this.state.openAnnotationId === annotationId) {
+      this.setState({ openAnnotationId: null, popupPosition: null })
+    } else {
+      // Open new popup (this also closes any currently open one)
+      this.setState({
+        openAnnotationId: annotationId,
+        popupPosition: position
+      })
+    }
   }
 
-  handleDeleteRecord = (annotationIndex: number, recordIndex: number) => {
-    const annotation = this.state.annotations[annotationIndex]
-    if (annotation.type === 'reference') {
-      const refAnnotation = annotation as ReferenceAnnotation
+  handleDeleteAnnotation = (annotationId: string) => {
+    if (!this.editor) return
+
+    // Remove mark from document
+    this.editor.chain()
+      .focus()
+      .unsetMark('annotation')
+      .run()
+
+    // Remove from annotations map
+    this.annotations.delete(annotationId)
+
+    // Trigger re-render
+    this.setState(prev => ({
+      annotationsVersion: prev.annotationsVersion + 1,
+      openAnnotationId: this.state.openAnnotationId === annotationId ? null : this.state.openAnnotationId
+    }))
+
+    // Save annotations after deletion
+    this.saveAnnotations()
+  }
+
+  handleDeleteRecord = (annotationId: string, recordIndex: number) => {
+    const entry = this.annotations.get(annotationId)
+    if (entry && entry.annotation.type === 'reference') {
+      const refAnnotation = entry.annotation as ReferenceAnnotation
       const newRecords = refAnnotation.records.filter((_, i) => i !== recordIndex)
       if (newRecords.length === 0) {
         // If no records left, delete the entire annotation
-        this.handleDeleteAnnotation(annotationIndex)
+        this.handleDeleteAnnotation(annotationId)
       } else {
         // Update the annotation with remaining records
         const updatedAnnotation: ReferenceAnnotation = {
           ...refAnnotation,
           records: newRecords
         }
-        const newAnnotations = [...this.state.annotations]
-        newAnnotations[annotationIndex] = updatedAnnotation
-        this.setState({ annotations: newAnnotations })
+        this.annotations.set(annotationId, {
+          ...entry,
+          annotation: updatedAnnotation
+        })
+        this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }))
+
+        // Save annotations after update
+        this.saveAnnotations()
       }
     }
   }
 
-  handleDeleteExtension = (annotationIndex: number, extensionIndex: number) => {
-    const annotation = this.state.annotations[annotationIndex]
-    if (annotation.type === 'list') {
-      const listAnnotation = annotation as ListAnnotation
+  handleDeleteExtension = (annotationId: string, extensionIndex: number) => {
+    const entry = this.annotations.get(annotationId)
+    if (entry && entry.annotation.type === 'list') {
+      const listAnnotation = entry.annotation as ListAnnotation
       const newExtensions = listAnnotation.extensions.filter((_, i) => i !== extensionIndex)
       if (newExtensions.length === 0) {
         // If no extensions left, delete the entire annotation
-        this.handleDeleteAnnotation(annotationIndex)
+        this.handleDeleteAnnotation(annotationId)
       } else {
         // Update the annotation with remaining extensions
         const updatedAnnotation: ListAnnotation = {
           ...listAnnotation,
           extensions: newExtensions
         }
-        const newAnnotations = [...this.state.annotations]
-        newAnnotations[annotationIndex] = updatedAnnotation
-        this.setState({ annotations: newAnnotations })
+        this.annotations.set(annotationId, {
+          ...entry,
+          annotation: updatedAnnotation
+        })
+        this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }))
+
+        // Save annotations after update
+        this.saveAnnotations()
       }
     }
   }
@@ -385,110 +794,111 @@ class Note extends Component<NoteProps, NoteState> {
     // console.log('Pasted content:', pastedText)
   }
 
-  // Render an overlay copy of the content with annotation spans so the editable
-  // DOM stays untouched (prevents cursor jumps/reflow).
-  renderAnnotationOverlay() {
-    const content = this.state.content
-    if (this.state.annotations.length === 0) {
+  // Render annotations by reading marks from the document
+  renderAnnotationOverlay(): React.ReactNode {
+    if (!this.editor || this.annotations.size === 0) {
       return null
     }
+
     const getPortalRoot = () => this.annotationLayerRef.current
+    const annotationRanges = new Map<string, { from: number; to: number }>()
+    const processedIds = new Set<string>()
 
-    // Combine all annotations, sort by position
-    interface SpanItem {
-      index: number
-      textSpan: string
-      component: React.ReactElement
-    }
+    // First pass: collect all text nodes with marks and build ranges
+    this.editor.state.doc.descendants((node, pos) => {
+      if (node.isText && node.marks) {
+        node.marks.forEach(mark => {
+          if (mark.type.name === 'annotation' && mark.attrs.annotationId) {
+            const annotationId = mark.attrs.annotationId
+            if (processedIds.has(annotationId)) return
 
-    const spans: SpanItem[] = []
-    let keyCounter = 0
+            // Find the full range of this mark by looking ahead
+            let from = pos
+            let to = pos + node.nodeSize
 
-    // Process all annotations (both reference and list)
-    this.state.annotations.forEach((annotation, annotationIndex) => {
-      const { textSpan, type } = annotation
-      const index = content.indexOf(textSpan)
-      if (index !== -1) {
-        let notationType: string;
-        let notationColor: string;
-        let popupLabel: string;
-        let child: React.ReactElement;
+            // Look ahead to find contiguous nodes with the same mark
+            let currentPos = pos + node.nodeSize
+            this.editor!.state.doc.nodesBetween(currentPos, this.editor!.state.doc.content.size, (nextNode, nextPos) => {
+              if (nextNode.isText && nextNode.marks) {
+                const hasSameMark = nextNode.marks.some(m =>
+                  m.type.name === 'annotation' && m.attrs.annotationId === annotationId
+                )
+                if (hasSameMark) {
+                  to = nextPos + nextNode.nodeSize
+                  return false // Continue searching
+                }
+              }
+              return true // Stop searching
+            })
 
-        if (type === 'reference') {
+            annotationRanges.set(annotationId, { from, to })
+            processedIds.add(annotationId)
+          }
+        })
+      }
+      return true
+    })
+
+    // Second pass: render components
+    const spans: Array<{ from: number; component: React.ReactElement }> = []
+
+    annotationRanges.forEach((range, annotationId) => {
+      const annotationEntry = this.annotations.get(annotationId)
+      if (!annotationEntry) return
+
+      const { annotation } = annotationEntry
+
+      try {
+        let popupLabel: string
+        let child: React.ReactElement
+
+        if (annotation.type === 'reference') {
           const refAnnotation = annotation as ReferenceAnnotation
-          notationType = 'box'
-          notationColor = 'rgba(100, 100, 100, 0.55)'
           popupLabel = 'Annotations'
           child = (
             <ReferenceAnnotationContent
               records={refAnnotation.records}
-              onDeleteRecord={(recordIndex) => this.handleDeleteRecord(annotationIndex, recordIndex)}
+              onDeleteRecord={(recordIndex) => this.handleDeleteRecord(annotationId, recordIndex)}
             />
           )
-        } else if (type === 'list') {
+        } else if (annotation.type === 'list') {
           const listAnnotation = annotation as ListAnnotation
-          notationType = 'box'
-          notationColor = '#ff4444'
           popupLabel = 'List Extensions'
           child = (
             <ListAnnotationContent
               extensions={listAnnotation.extensions}
-              onDeleteExtension={(extensionIndex) => this.handleDeleteExtension(annotationIndex, extensionIndex)}
+              onDeleteExtension={(extensionIndex) => this.handleDeleteExtension(annotationId, extensionIndex)}
             />
           )
         } else {
           return // Skip unknown types
         }
 
-        let component = (
+        const component = (
           <AnnotationPopup
-            key={`annotation-${keyCounter++}`}
-            textSpan={textSpan}
-            notationType={notationType as 'box' | 'underline'}
-            notationColor={notationColor}
+            key={`annotation-${annotationId}`}
+            annotationId={annotationId}
             popupLabel={popupLabel}
-            isVisible={this.state.openAnnotationIndex === annotationIndex}
-            onPopupOpen={() => this.handleAnnotationPopupOpen(annotationIndex)}
-            onPopupClose={() => this.handleAnnotationPopupClose(annotationIndex)}
+            isVisible={this.state.openAnnotationId === annotationId}
+            position={this.state.openAnnotationId === annotationId ? this.state.popupPosition : null}
+            onPopupOpen={() => this.handleAnnotationPopupOpen(annotationId)}
+            onPopupClose={() => this.handleAnnotationPopupClose(annotationId)}
             getPortalRoot={getPortalRoot}
           >
             {child}
           </AnnotationPopup>
         )
 
-        spans.push({
-          index,
-          textSpan,
-          component
-        })
+        spans.push({ from: range.from, component })
+      } catch (error) {
+        console.warn('Error rendering annotation:', error)
       }
     })
 
-    // Sort by position in content
-    spans.sort((a, b) => a.index - b.index)
+    // Sort by position
+    spans.sort((a, b) => a.from - b.from)
 
-    // Build array of text segments and components
-    const segments: (string | React.ReactElement)[] = []
-    let lastIndex = 0
-
-    spans.forEach((span) => {
-      // Add text before the span
-      if (span.index > lastIndex) {
-        segments.push(content.substring(lastIndex, span.index))
-      }
-
-      // Add the component
-      segments.push(span.component)
-
-      lastIndex = span.index + span.textSpan.length
-    })
-
-    // Add remaining text after last span
-    if (lastIndex < content.length) {
-      segments.push(content.substring(lastIndex))
-    }
-
-    return segments.length > 0 ? segments : content
+    return spans.map(span => span.component)
   }
 
   render() {
@@ -513,14 +923,19 @@ class Note extends Component<NoteProps, NoteState> {
               {this.renderAnnotationOverlay()}
             </div>
           </div>
-          <div
-            ref={this.contentEditableRef}
-            className="editor-content"
-            contentEditable
-            onInput={this.handleContentChange}
-            onPaste={this.handlePaste}
-            suppressContentEditableWarning
-          />
+                  <TipTapEditorWrapper
+                    initialContent={this.props.note.content || ''}
+                    onEditorReady={(editor) => {
+                      this.editor = editor
+                      if (this.props.note.annotations && this.props.note.annotations.length > 0) {
+                        setTimeout(() => this.loadAnnotations(), 0)
+                      }
+                    }}
+                    onUpdate={() => {
+                      this.handleContentChange()
+                    }}
+                    onMarkClick={this.handleMarkClick}
+                  />
         </div>
         {this.state.isAnalyzing && (
           <div className="analysis-spinner">

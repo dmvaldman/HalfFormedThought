@@ -1,7 +1,7 @@
 import { Component } from 'react'
 import Sidebar from './Sidebar'
 import Note from './Note'
-import { NoteType } from './types'
+import { NoteType, TextSpanAnnotation } from './types'
 import { loadNotes, saveNotes, generateId } from './storage'
 import { debounce } from './utils'
 
@@ -85,6 +85,16 @@ class App extends Component<{}, AppState> {
     this.debouncedSaveNotes(updatedNotes)
   }
 
+  handleUpdateAnnotations = (noteId: string, annotations: TextSpanAnnotation[]) => {
+    const updatedNotes = this.state.notes.map((note) =>
+      note.id === noteId
+        ? { ...note, annotations, updatedAt: Date.now() }
+        : note
+    )
+    this.setState({ notes: updatedNotes })
+    this.debouncedSaveNotes(updatedNotes)
+  }
+
   render() {
     const { notes, currentNoteId } = this.state
     const currentNote = notes.find((note) => note.id === currentNoteId) || null
@@ -112,6 +122,7 @@ class App extends Component<{}, AppState> {
             note={currentNote}
             onUpdateTitle={this.handleUpdateTitle}
             onUpdateContent={this.handleUpdateContent}
+            onUpdateAnnotations={this.handleUpdateAnnotations}
           />
         )}
         {!currentNote && (

@@ -1,13 +1,11 @@
 import { Component, createRef, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { RoughNotation } from 'react-rough-notation'
 
 export interface AnnotationPopupProps {
-  textSpan: string
-  notationType: string
-  notationColor: string
+  annotationId: string
   isVisible: boolean
   popupLabel: string
+  position: { top: number; left: number } | null // Position passed from TipTap
   onPopupOpen: () => void
   onPopupClose: () => void
   getPortalRoot?: () => HTMLElement | null
@@ -16,32 +14,48 @@ export interface AnnotationPopupProps {
 }
 
 export interface AnnotationPopupState {
-  popupPosition: { top: number; left: number } | null
   isHovered: boolean
   isPinned: boolean
   isDragging: boolean
   dragOffset: { x: number; y: number } | null
+  draggedPosition: { top: number; left: number } | null // Store dragged position separately
 }
 
 export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationPopupState> {
-  protected containerRef = createRef<HTMLSpanElement>()
   protected popupRef = createRef<HTMLDivElement>()
   protected closeTimeout: NodeJS.Timeout | null = null
 
   constructor(props: AnnotationPopupProps) {
     super(props)
     this.state = {
-      popupPosition: null,
       isHovered: false,
       isPinned: false,
       isDragging: false,
-      dragOffset: null
+      dragOffset: { x: 0, y: 0 },
+      draggedPosition: null
+    }
+  }
+
+  componentDidMount() {
+    // Add click outside listener when popup is visible
+    if (this.props.isVisible) {
+      document.addEventListener('click', this.handleClickOutside)
+    }
+  }
+
+  componentDidUpdate(prevProps: AnnotationPopupProps) {
+    // Add/remove click outside listener based on visibility
+    if (this.props.isVisible && !prevProps.isVisible) {
+      document.addEventListener('click', this.handleClickOutside)
+    } else if (!this.props.isVisible && prevProps.isVisible) {
+      document.removeEventListener('click', this.handleClickOutside)
     }
   }
 
   componentWillUnmount() {
     this.cancelClose()
     this.removeDragListeners()
+    document.removeEventListener('click', this.handleClickOutside)
   }
 
   protected cancelClose = () => {
@@ -63,38 +77,30 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     }, 500)
   }
 
-  protected handleMouseEnter = () => {
-    const portalRoot = this.props.getPortalRoot?.()
-    if (this.containerRef.current && portalRoot) {
-      const rect = this.containerRef.current.getBoundingClientRect()
-      const containerRect = portalRoot.getBoundingClientRect()
-
-      // Cancel any pending close
-      this.cancelClose()
-
-      this.setState(prevState => {
-        const shouldPreservePosition = prevState.isPinned && prevState.popupPosition
-        return {
-          popupPosition: shouldPreservePosition
-            ? prevState.popupPosition
-            : {
-                top: rect.bottom - containerRect.top + 8,
-                left: rect.left - containerRect.left
-              },
-          isHovered: true,
-          isPinned: shouldPreservePosition ? true : false
-        }
-      })
-
-      this.props.onPopupOpen()
-    }
-  }
-
-  protected handleMouseLeave = () => {
+  // Handle click outside to close popup
+  protected handleClickOutside = (e: MouseEvent) => {
     if (this.state.isPinned) return
-    this.setState({ isHovered: false })
-    // Schedule close after 500ms if we're no longer hovered
-    this.scheduleClose()
+
+    const popupElement = this.popupRef.current
+    const target = e.target as Node
+
+    // Check if click is outside popup
+    if (popupElement && popupElement.contains(target)) {
+      return // Click is inside popup
+    }
+
+    // Check if click is in the editor (TipTap handles mark clicks)
+    const portalRoot = this.props.getPortalRoot?.()
+    if (portalRoot) {
+      const editorElement = portalRoot.parentElement?.querySelector('.editor-content')
+      if (editorElement && editorElement.contains(target)) {
+        // Click is in the editor - TipTap will handle mark clicks
+        return
+      }
+    }
+
+    // Click is outside both popup and editor
+    this.props.onPopupClose()
   }
 
   protected handlePopupMouseEnter = () => {
@@ -119,7 +125,7 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     e.preventDefault()
 
     const portalRoot = this.props.getPortalRoot?.()
-    if (!portalRoot || !this.popupRef.current) return
+    if (!portalRoot || !this.popupRef.current || !this.props.position) return
 
     const popupRect = this.popupRef.current.getBoundingClientRect()
     const containerRect = portalRoot.getBoundingClientRect()
@@ -127,13 +133,15 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     const startX = e.clientX - containerRect.left
     const startY = e.clientY - containerRect.top
 
-    const offsetX = startX - (this.state.popupPosition?.left || popupRect.left - containerRect.left)
-    const offsetY = startY - (this.state.popupPosition?.top || popupRect.top - containerRect.top)
+    const currentPosition = this.state.draggedPosition || this.props.position
+    const offsetX = startX - currentPosition.left
+    const offsetY = startY - currentPosition.top
 
     this.setState({
       isDragging: true,
       dragOffset: { x: offsetX, y: offsetY },
-      isPinned: true
+      isPinned: true,
+      draggedPosition: currentPosition
     })
 
     this.addDragListeners()
@@ -160,7 +168,7 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     const newY = e.clientY - containerRect.top - this.state.dragOffset.y
 
     this.setState({
-      popupPosition: {
+      draggedPosition: {
         left: Math.max(0, Math.min(newX, containerRect.width - 200)),
         top: Math.max(0, newY)
       }
@@ -173,29 +181,16 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
   }
 
   render() {
-    const { textSpan, notationType, notationColor, isVisible, popupLabel, children, onRequestFocus } = this.props
-    const { popupPosition, isPinned, isDragging } = this.state
+    const { isVisible, popupLabel, children, position } = this.props
+    const { isPinned, isDragging, draggedPosition } = this.state
     const portalRoot = this.props.getPortalRoot?.() || null
+
+    // Use dragged position if available, otherwise use prop position
+    const popupPosition = draggedPosition || position
     const shouldShowPopup = (isVisible || isPinned) && popupPosition !== null && portalRoot
 
     return (
       <>
-        <span
-          ref={this.containerRef}
-          className="annotation-span-wrapper"
-          onMouseEnter={this.handleMouseEnter}
-          onMouseLeave={this.handleMouseLeave}
-          onMouseDown={onRequestFocus}
-        >
-          <RoughNotation
-            type={notationType}
-            color={notationColor}
-            strokeWidth={2}
-            show={true}
-          >
-            {textSpan}
-          </RoughNotation>
-        </span>
         {shouldShowPopup &&
           createPortal(
             <div

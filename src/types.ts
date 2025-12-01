@@ -6,9 +6,8 @@ export interface RecordType {
   search_query?: string
 }
 
-// Base annotation type
+// Base annotation type (no position needed - marks handle that)
 export interface BaseAnnotation {
-  textSpan: string
   type: 'reference' | 'list'
 }
 
@@ -27,10 +26,18 @@ export interface ListAnnotation extends BaseAnnotation {
 // Union type for all annotations
 export type Annotation = ReferenceAnnotation | ListAnnotation
 
+// Text span annotation entry (stored + in-memory representation)
+export interface TextSpanAnnotation {
+  annotationId: string
+  textSpan: string // Exact text that is annotated
+  annotation: Annotation // Annotation metadata (records/extensions)
+}
+
 export interface NoteType {
   id: string
   title: string
   content: string // Plain text content
+  annotations?: TextSpanAnnotation[] // Stored annotations
   createdAt: number
   updatedAt: number
 }

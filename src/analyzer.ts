@@ -100,7 +100,8 @@ export class Analyzer {
       // For mock mode, find the annotate tool and call it with mock data
       const annotateTool = this.tools.find(t => t.function.name === 'annotate')
       if (annotateTool) {
-        const mockData = mockAnnotations as ReferenceAnnotation[]
+        // Mock data still has textSpan - will be converted to position in onAnnotate
+        const mockData = mockAnnotations as any[]
         // Call execute for each annotation individually
         mockData.forEach(annotation => {
           annotateTool.execute(annotation)
@@ -243,9 +244,10 @@ export class Analyzer {
     // Execute the tool with appropriate arguments
     if (functionName === 'annotate') {
       // For annotate, args.records is already an array of 1-3 record objects
-      const annotation: ReferenceAnnotation = {
+      // Note: textSpan will be converted to position in onAnnotate
+      const annotation: any = {
         type: 'reference',
-        textSpan: args.textSpan,
+        textSpan: args.textSpan, // Temporary - will be converted to position
         records: args.records
       }
       console.log('Calling tool.execute with annotation:', annotation)
@@ -265,15 +267,16 @@ export class Analyzer {
       return { content }
     } else if (functionName === 'extendList') {
       // For extendList, create ListAnnotation object
-      const listAnnotation: ListAnnotation = {
+      // Note: textSpan will be converted to position in onExtendList
+      const listExtension: any = {
         type: 'list',
-        textSpan: args.textSpan,
-        extensions: args.extensions // Already an array of strings
+        textSpan: args.textSpan, // Temporary - will be converted to position
+        extensions: args.extensions
       }
-      console.log('Calling tool.execute with listAnnotation:', listAnnotation)
+      console.log('Calling tool.execute with listExtension:', listExtension)
 
       try {
-        tool.execute(listAnnotation)
+        tool.execute(listExtension)
         console.log('tool.execute completed')
       } catch (error) {
         console.error('Error executing tool:', error)

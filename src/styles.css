@@ -311,15 +311,16 @@ button {
   pointer-events: auto;
 }
 
-.annotation-overlay-content .annotation-span-wrapper {
-  pointer-events: auto; /* Allow hovers on highlighted spans */
-  /* color: var(--white); */
-  color: transparent;
+/* Annotation marks are styled inline by TipTap, but we can add hover effects */
+.editor-content span[data-annotation-id] {
+  cursor: pointer;
+  transition: background-color 0.2s ease, opacity 0.2s ease;
+  border-radius: 2px;
 }
 
-.annotation-span-wrapper {
-  display: inline;
-  position: relative;
+.editor-content span[data-annotation-id]:hover {
+  opacity: 1;
+  filter: brightness(1.3);
 }
 
 .annotation-popup {
