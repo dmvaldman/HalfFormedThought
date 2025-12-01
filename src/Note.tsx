@@ -248,6 +248,32 @@ class Note extends Component<NoteProps, NoteState> {
     this.debouncedContentLogger = debounce(this.contentLogger.bind(this), 2000)
   }
 
+  // Find the range of a mark in the document by annotationId
+  private annotationIdToRange(annotationId: string): { from: number; to: number } | null {
+    if (!this.editor) return null
+
+    const { state } = this.editor
+    let markRange: { from: number; to: number } | null = null
+
+    // Traverse the document to find the mark with this annotationId
+    state.doc.descendants((node, pos) => {
+      if (markRange) return false // Already found, stop traversing
+
+      const marks = node.marks.filter(mark =>
+        mark.type.name === 'annotation' &&
+        mark.attrs.annotationId === annotationId
+      )
+
+      if (marks.length > 0) {
+        // Found the mark, get its range
+        markRange = { from: pos, to: pos + node.nodeSize }
+        return false // Stop traversing
+      }
+    })
+
+    return markRange
+  }
+
   // Find textSpan in editor and return selection range
   private findTextSpan(textSpan: string): { from: number; to: number } | null {
     if (!this.editor) return null
@@ -737,11 +763,17 @@ class Note extends Component<NoteProps, NoteState> {
   handleDeleteAnnotation = (annotationId: string) => {
     if (!this.editor) return
 
-    // Remove mark from document
-    this.editor.chain()
-      .focus()
-      .unsetMark('annotation')
-      .run()
+    // Find the mark range in the document
+    const markRange = this.annotationIdToRange(annotationId)
+
+    // Remove mark from document if found
+    if (markRange) {
+      this.editor.chain()
+        .setTextSelection({ from: markRange.from, to: markRange.to })
+        .unsetMark('annotation')
+        .setTextSelection(markRange.to) // Clear selection
+        .run()
+    }
 
     // Remove from annotations map using functional setState
     this.setState(prevState => {
