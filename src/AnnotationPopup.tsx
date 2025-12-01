@@ -1,5 +1,4 @@
 import { Component, createRef, ReactNode } from 'react'
-import { createPortal } from 'react-dom'
 
 export interface AnnotationPopupProps {
   annotationId: string
@@ -8,8 +7,6 @@ export interface AnnotationPopupProps {
   position: { top: number; left: number } | null // Position passed from TipTap
   onPopupOpen: () => void
   onPopupClose: () => void
-  getPortalRoot?: () => HTMLElement | null
-  onRequestFocus?: () => void
   children: ReactNode
 }
 
@@ -90,13 +87,10 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     }
 
     // Check if click is in the editor (TipTap handles mark clicks)
-    const portalRoot = this.props.getPortalRoot?.()
-    if (portalRoot) {
-      const editorElement = portalRoot.parentElement?.querySelector('.editor-content')
-      if (editorElement && editorElement.contains(target)) {
-        // Click is in the editor - TipTap will handle mark clicks
-        return
-      }
+    const editorElement = document.querySelector('.editor-content')
+    if (editorElement && editorElement.contains(target)) {
+      // Click is in the editor - TipTap will handle mark clicks
+      return
     }
 
     // Click is outside both popup and editor
@@ -117,6 +111,8 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
 
   protected handleCloseClick = (e: React.MouseEvent) => {
     e.stopPropagation()
+    // Clear pinned state when closing
+    this.setState({ isPinned: false })
     this.props.onPopupClose()
   }
 
@@ -124,11 +120,13 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     if (e.button !== 0) return // Only handle left mouse button
     e.preventDefault()
 
-    const portalRoot = this.props.getPortalRoot?.()
-    if (!portalRoot || !this.popupRef.current || !this.props.position) return
+    if (!this.popupRef.current || !this.props.position) return
 
     const popupRect = this.popupRef.current.getBoundingClientRect()
-    const containerRect = portalRoot.getBoundingClientRect()
+    // Find the annotation layer container (parent of the popup)
+    const container = this.popupRef.current.closest('.annotation-layer')
+    if (!container) return
+    const containerRect = (container as HTMLElement).getBoundingClientRect()
 
     const startX = e.clientX - containerRect.left
     const startY = e.clientY - containerRect.top
@@ -158,12 +156,12 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
   }
 
   private handleDragMove = (e: MouseEvent) => {
-    if (!this.state.isDragging || !this.state.dragOffset) return
+    if (!this.state.isDragging || !this.state.dragOffset || !this.popupRef.current) return
 
-    const portalRoot = this.props.getPortalRoot?.()
-    if (!portalRoot) return
-
-    const containerRect = portalRoot.getBoundingClientRect()
+    // Find the annotation layer container (parent of the popup)
+    const container = this.popupRef.current.closest('.annotation-layer')
+    if (!container) return
+    const containerRect = (container as HTMLElement).getBoundingClientRect()
     const newX = e.clientX - containerRect.left - this.state.dragOffset.x
     const newY = e.clientY - containerRect.top - this.state.dragOffset.y
 
@@ -183,67 +181,64 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
   render() {
     const { isVisible, popupLabel, children, position } = this.props
     const { isPinned, isDragging, draggedPosition } = this.state
-    const portalRoot = this.props.getPortalRoot?.() || null
 
     // Use dragged position if available, otherwise use prop position
     const popupPosition = draggedPosition || position
-    const shouldShowPopup = (isVisible || isPinned) && popupPosition !== null && portalRoot
+    const shouldShowPopup = (isVisible || isPinned) && popupPosition !== null
+
+    if (!shouldShowPopup) {
+      return null
+    }
 
     return (
-      <>
-        {shouldShowPopup &&
-          createPortal(
-            <div
-              ref={this.popupRef}
-              className={`annotation-popup ${isVisible ? 'visible' : ''} ${isPinned ? 'pinned' : ''} ${isDragging ? 'dragging' : ''}`}
-              style={{
-                top: `${popupPosition.top}px`,
-                left: `${popupPosition.left}px`
+      <div
+        ref={this.popupRef}
+        className={`annotation-popup ${isVisible ? 'visible' : ''} ${isPinned ? 'pinned' : ''} ${isDragging ? 'dragging' : ''}`}
+        style={{
+          top: `${popupPosition.top}px`,
+          left: `${popupPosition.left}px`
+        }}
+        onMouseEnter={this.handlePopupMouseEnter}
+        onMouseLeave={this.handlePopupMouseLeave}
+      >
+        <div
+          className="annotation-popup-header"
+          onMouseDown={this.handleDragStart}
+        >
+          <span className="annotation-popup-label">{popupLabel}</span>
+          <div className="annotation-popup-actions">
+            <button
+              className={`annotation-popup-pin ${isPinned ? 'active' : ''}`}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                this.setState(prev => ({ isPinned: !prev.isPinned }))
               }}
-              onMouseEnter={this.handlePopupMouseEnter}
-              onMouseLeave={this.handlePopupMouseLeave}
+              aria-label={isPinned ? `Unpin ${popupLabel}` : `Pin ${popupLabel}`}
             >
-              <div
-                className="annotation-popup-header"
-                onMouseDown={this.handleDragStart}
+              <svg
+                className="annotation-popup-pin-icon"
+                viewBox="0 0 24 24"
+                role="presentation"
+                focusable="false"
               >
-                <span className="annotation-popup-label">{popupLabel}</span>
-                <div className="annotation-popup-actions">
-                  <button
-                    className={`annotation-popup-pin ${isPinned ? 'active' : ''}`}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      this.setState(prev => ({ isPinned: !prev.isPinned }))
-                    }}
-                    aria-label={isPinned ? `Unpin ${popupLabel}` : `Pin ${popupLabel}`}
-                  >
-                    <svg
-                      className="annotation-popup-pin-icon"
-                      viewBox="0 0 24 24"
-                      role="presentation"
-                      focusable="false"
-                    >
-                      <path d="M8 3h8l-.4 5.5H19v2h-6.5V21h-1V10.5H5v-2h3.4z" />
-                    </svg>
-                  </button>
-                  <button
-                    className="annotation-popup-close"
-                    onClick={this.handleCloseClick}
-                    onMouseDown={(e) => e.stopPropagation()}
-                    aria-label={`Close ${popupLabel}`}
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-              <div className="annotation-popup-body">
-                {children}
-              </div>
-            </div>,
-            portalRoot
-          )}
-      </>
+                <path d="M8 3h8l-.4 5.5H19v2h-6.5V21h-1V10.5H5v-2h3.4z" />
+              </svg>
+            </button>
+            <button
+              className="annotation-popup-close"
+              onClick={this.handleCloseClick}
+              onMouseDown={(e) => e.stopPropagation()}
+              aria-label={`Close ${popupLabel}`}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+        <div className="annotation-popup-body">
+          {children}
+        </div>
+      </div>
     )
   }
 }

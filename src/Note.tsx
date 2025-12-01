@@ -428,7 +428,6 @@ class Note extends Component<NoteProps, NoteState> {
       }
       return
     }
-
   }
 
   shouldComponentUpdate(nextProps: NoteProps, nextState: NoteState) {
@@ -793,7 +792,6 @@ class Note extends Component<NoteProps, NoteState> {
       return null
     }
 
-    const getPortalRoot = () => this.annotationLayerRef.current
     const annotationRanges = new Map<string, { from: number; to: number }>()
     const processedIds = new Set<string>()
 
@@ -876,7 +874,6 @@ class Note extends Component<NoteProps, NoteState> {
             position={this.state.openAnnotationId === annotationId ? this.state.popupPosition : null}
             onPopupOpen={() => this.handleAnnotationPopupOpen(annotationId)}
             onPopupClose={() => this.handleAnnotationPopupClose(annotationId)}
-            getPortalRoot={getPortalRoot}
           >
             {child}
           </AnnotationPopup>
