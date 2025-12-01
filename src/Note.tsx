@@ -168,7 +168,7 @@ interface NoteProps {
 }
 
 interface NoteState {
-  annotationsVersion: number // Increment to trigger re-render when annotations change
+  annotations: Map<string, TextSpanAnnotation> // Map annotationId -> annotation entry
   openAnnotationId: string | null
   popupPosition: { top: number; left: number } | null
   content: string
@@ -181,12 +181,11 @@ class Note extends Component<NoteProps, NoteState> {
   private analyzer: Analyzer
   private debouncedContentLogger: () => void
   private editor: TiptapEditor | null = null
-  private annotations: Map<string, TextSpanAnnotation> = new Map() // Single source of truth for annotations
 
   constructor(props: NoteProps) {
     super(props)
     this.state = {
-      annotationsVersion: 0,
+      annotations: new Map(),
       openAnnotationId: null,
       popupPosition: null,
       content: props.note.content || '',
@@ -295,14 +294,12 @@ class Note extends Component<NoteProps, NoteState> {
         annotation: newAnnotation
       }
 
-      // Add to annotations map stored as class property (not React state)
-      // This avoids React's async setState batching issues
-      console.log('onAnnotate: Adding annotation:', annotationId)
-      // Add to annotations map (single source of truth)
-      this.annotations.set(annotationId, annotationEntry)
-
-      // Trigger re-render and save
-      this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }), () => {
+      // Add to annotations map using functional setState to avoid batching issues
+      this.setState(prevState => {
+        const newAnnotations = new Map(prevState.annotations)
+        newAnnotations.set(annotationId, annotationEntry)
+        return { annotations: newAnnotations }
+      }, () => {
         this.saveAnnotations()
       })
     }
@@ -354,11 +351,12 @@ class Note extends Component<NoteProps, NoteState> {
         annotation: newAnnotation
       }
 
-      // Add to annotations map (single source of truth)
-      this.annotations.set(annotationId, annotationEntry)
-
-      // Trigger re-render and save
-      this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }), () => {
+      // Add to annotations map using functional setState to avoid batching issues
+      this.setState(prevState => {
+        const newAnnotations = new Map(prevState.annotations)
+        newAnnotations.set(annotationId, annotationEntry)
+        return { annotations: newAnnotations }
+      }, () => {
         this.saveAnnotations()
       })
     }
@@ -370,13 +368,12 @@ class Note extends Component<NoteProps, NoteState> {
       return
     }
 
-    // Clear existing annotations
-    this.annotations.clear()
-
     if (!this.props.note.annotations || this.props.note.annotations.length === 0) {
-      this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }))
+      this.setState({ annotations: new Map() })
       return
     }
+
+    const annotationsMap = new Map<string, TextSpanAnnotation>()
 
     this.props.note.annotations.forEach(storedAnnotation => {
       const { annotationId, textSpan, annotation } = storedAnnotation
@@ -398,14 +395,14 @@ class Note extends Component<NoteProps, NoteState> {
 
       const actualTextSpan = this.editor!.state.doc.textBetween(range.from, range.to)
 
-      this.annotations.set(annotationId, {
+      annotationsMap.set(annotationId, {
         annotationId,
         textSpan: actualTextSpan,
         annotation
       })
     })
 
-    this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }))
+    this.setState({ annotations: annotationsMap })
   }
 
   componentDidMount() {
@@ -418,10 +415,9 @@ class Note extends Component<NoteProps, NoteState> {
       const initial = this.props.note.content || ''
       this.setContent(initial)
       this.initialContent = initial
-      this.annotations.clear()
       this.setState({
         content: initial,
-        annotationsVersion: this.state.annotationsVersion + 1,
+        annotations: new Map(),
         openAnnotationId: null,
         popupPosition: null,
         isAnalyzing: false
@@ -447,7 +443,7 @@ class Note extends Component<NoteProps, NoteState> {
     // note identity changes or annotation-related state changes.
     if (nextProps.note.id !== this.props.note.id) return true
     if (nextProps.note.annotations !== this.props.note.annotations) return true
-    if (nextState.annotationsVersion !== this.state.annotationsVersion) return true
+    if (nextState.annotations !== this.state.annotations) return true
     if (nextState.openAnnotationId !== this.state.openAnnotationId) return true
     if (nextState.content !== this.state.content) return true
     if (nextState.isAnalyzing !== this.state.isAnalyzing) return true
@@ -525,9 +521,6 @@ class Note extends Component<NoteProps, NoteState> {
 
     this.setState({ content })
 
-    // Save annotations
-    this.saveAnnotations()
-
     // Only trigger the analysis logger if actual text content changed (not just marks)
     if (contentChanged) {
       // Call the debounced logger (will log after 2 seconds of inactivity)
@@ -554,7 +547,7 @@ class Note extends Component<NoteProps, NoteState> {
         node.marks.forEach(mark => {
           if (mark.type.name === 'annotation' && mark.attrs.annotationId) {
             const annotationId = mark.attrs.annotationId
-            const annotationEntry = this.annotations.get(annotationId)
+            const annotationEntry = this.state.annotations.get(annotationId)
 
             if (!processedIds.has(annotationId)) {
               // Find the full range of this mark
@@ -580,7 +573,7 @@ class Note extends Component<NoteProps, NoteState> {
               const textSpan = this.editor!.state.doc.textBetween(from, to)
 
               // Get annotation data from state if available
-              const annotationEntry = this.annotations.get(annotationId)
+              const annotationEntry = this.state.annotations.get(annotationId)
               if (annotationEntry) {
                 const serializedEntry: TextSpanAnnotation = {
                   annotationId,
@@ -723,21 +716,22 @@ class Note extends Component<NoteProps, NoteState> {
       .unsetMark('annotation')
       .run()
 
-    // Remove from annotations map
-    this.annotations.delete(annotationId)
-
-    // Trigger re-render
-    this.setState(prev => ({
-      annotationsVersion: prev.annotationsVersion + 1,
-      openAnnotationId: this.state.openAnnotationId === annotationId ? null : this.state.openAnnotationId
-    }))
-
-    // Save annotations after deletion
-    this.saveAnnotations()
+    // Remove from annotations map using functional setState
+    this.setState(prevState => {
+      const newAnnotations = new Map(prevState.annotations)
+      newAnnotations.delete(annotationId)
+      return {
+        annotations: newAnnotations,
+        openAnnotationId: prevState.openAnnotationId === annotationId ? null : prevState.openAnnotationId
+      }
+    }, () => {
+      // Save annotations after deletion
+      this.saveAnnotations()
+    })
   }
 
   handleDeleteRecord = (annotationId: string, recordIndex: number) => {
-    const entry = this.annotations.get(annotationId)
+    const entry = this.state.annotations.get(annotationId)
     if (entry && entry.annotation.type === 'reference') {
       const refAnnotation = entry.annotation as ReferenceAnnotation
       const newRecords = refAnnotation.records.filter((_, i) => i !== recordIndex)
@@ -745,25 +739,28 @@ class Note extends Component<NoteProps, NoteState> {
         // If no records left, delete the entire annotation
         this.handleDeleteAnnotation(annotationId)
       } else {
-        // Update the annotation with remaining records
+        // Update the annotation with remaining records using functional setState
         const updatedAnnotation: ReferenceAnnotation = {
           ...refAnnotation,
           records: newRecords
         }
-        this.annotations.set(annotationId, {
-          ...entry,
-          annotation: updatedAnnotation
+        this.setState(prevState => {
+          const newAnnotations = new Map(prevState.annotations)
+          newAnnotations.set(annotationId, {
+            ...entry,
+            annotation: updatedAnnotation
+          })
+          return { annotations: newAnnotations }
+        }, () => {
+          // Save annotations after update
+          this.saveAnnotations()
         })
-        this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }))
-
-        // Save annotations after update
-        this.saveAnnotations()
       }
     }
   }
 
   handleDeleteExtension = (annotationId: string, extensionIndex: number) => {
-    const entry = this.annotations.get(annotationId)
+    const entry = this.state.annotations.get(annotationId)
     if (entry && entry.annotation.type === 'list') {
       const listAnnotation = entry.annotation as ListAnnotation
       const newExtensions = listAnnotation.extensions.filter((_, i) => i !== extensionIndex)
@@ -771,19 +768,22 @@ class Note extends Component<NoteProps, NoteState> {
         // If no extensions left, delete the entire annotation
         this.handleDeleteAnnotation(annotationId)
       } else {
-        // Update the annotation with remaining extensions
+        // Update the annotation with remaining extensions using functional setState
         const updatedAnnotation: ListAnnotation = {
           ...listAnnotation,
           extensions: newExtensions
         }
-        this.annotations.set(annotationId, {
-          ...entry,
-          annotation: updatedAnnotation
+        this.setState(prevState => {
+          const newAnnotations = new Map(prevState.annotations)
+          newAnnotations.set(annotationId, {
+            ...entry,
+            annotation: updatedAnnotation
+          })
+          return { annotations: newAnnotations }
+        }, () => {
+          // Save annotations after update
+          this.saveAnnotations()
         })
-        this.setState(prev => ({ annotationsVersion: prev.annotationsVersion + 1 }))
-
-        // Save annotations after update
-        this.saveAnnotations()
       }
     }
   }
@@ -796,7 +796,7 @@ class Note extends Component<NoteProps, NoteState> {
 
   // Render annotations by reading marks from the document
   renderAnnotationOverlay(): React.ReactNode {
-    if (!this.editor || this.annotations.size === 0) {
+    if (!this.editor || this.state.annotations.size === 0) {
       return null
     }
 
@@ -843,7 +843,7 @@ class Note extends Component<NoteProps, NoteState> {
     const spans: Array<{ from: number; component: React.ReactElement }> = []
 
     annotationRanges.forEach((range, annotationId) => {
-      const annotationEntry = this.annotations.get(annotationId)
+      const annotationEntry = this.state.annotations.get(annotationId)
       if (!annotationEntry) return
 
       const { annotation } = annotationEntry

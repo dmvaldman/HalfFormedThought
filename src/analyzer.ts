@@ -164,7 +164,11 @@ export class Analyzer {
         }
 
         const response = await llmService.callLLM(messages, options)
-        console.log('Response:\n\n', response)
+
+        // LLM text accompanying a tool call for logging
+        if (response.content) {
+          console.log(response.content)
+        }
 
         finishReason = response.finish_reason || null
 
@@ -182,7 +186,6 @@ export class Analyzer {
           const toolResponses: ToolResponse[] = []
           for (const toolCall of response.tool_calls) {
             const toolCallName = toolCall.function.name
-            console.log(`Executing tool: ${toolCallName} with id: ${toolCall.id}`)
 
             const result = await this.executeTool(toolCall)
 
@@ -231,15 +234,11 @@ export class Analyzer {
     const functionName = toolCall.function.name
     const args = JSON.parse(toolCall.function.arguments || '{}')
 
-    console.log(`Executing tool: ${functionName}`, args)
-
     // Find the tool by name
     const tool = this.tools.find(t => t.function.name === functionName)
     if (!tool) {
       throw new Error(`Unknown tool: ${functionName}`)
     }
-
-    console.log(`Found tool: ${functionName}`, tool)
 
     // Execute the tool with appropriate arguments
     if (functionName === 'annotate') {
@@ -254,7 +253,6 @@ export class Analyzer {
 
       try {
         tool.execute(annotation)
-        console.log('tool.execute completed')
       } catch (error) {
         console.error('Error executing tool:', error)
         throw error
@@ -277,7 +275,6 @@ export class Analyzer {
 
       try {
         tool.execute(listExtension)
-        console.log('tool.execute completed')
       } catch (error) {
         console.error('Error executing tool:', error)
         throw error
