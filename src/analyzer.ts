@@ -34,11 +34,12 @@ You think in multi-disciplinary analogies, finding provocative insights in the l
 
 You have access to tools to help you analyze content:
 - Use \`annotate\` to provide annotations for text spans with research sources and insights
+- Use \`extendList\` to extend lists in the document by adding more entries
 
 When annotating:
+- We're not going for exhaustive coverage. We want to find the most interesting and provocative insights/extensions. Use your discretion and taste.
 - Ensure textSpan is an exact string match to the content (no "..." or correcting spelling or changing punctuation)
-- Ensure textSpan does not start with punctuation or whitespace
-- Provide 1-3 annotations per text span from diverse perspectives
+- Don't repeat annotations for the same text span
 `.trim()
 
 const USER_PROMPT_PREAMBLE = `

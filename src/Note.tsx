@@ -18,10 +18,18 @@ interface TipTapEditorWrapperProps {
   onMarkClick?: (annotationId: string, position: { top: number; left: number }) => void
 }
 
+// Helper to convert plain text newlines to HTML breaks for TipTap
+const convertNewlinesToBreaks = (text: string): string => {
+  return text.replace(/\n/g, '<br>')
+}
+
 const TipTapEditorWrapper: React.FC<TipTapEditorWrapperProps> = ({ initialContent, onEditorReady, onUpdate, onMarkClick }) => {
+  const editorRef = React.useRef<TiptapEditor | null>(null)
+
   const editor = useEditor({
     extensions: [StarterKit, AnnotationMark],
-    content: initialContent,
+    content: convertNewlinesToBreaks(initialContent),
+    enablePasteRules: false, // Disable default paste rules to let our custom handlePaste handle everything
     onUpdate: () => {
       onUpdate()
     },
@@ -58,11 +66,36 @@ const TipTapEditorWrapper: React.FC<TipTapEditorWrapperProps> = ({ initialConten
         // Return false to allow default behavior
         return false
       },
+      handlePaste: (view, event) => {
+        // Get plain text from clipboard
+        const clipboardData = (event as ClipboardEvent).clipboardData
+        if (!clipboardData) return false
+
+        const text = clipboardData.getData('text/plain')
+        if (!text) return false
+
+        // Convert all newlines (including multiple consecutive ones) to <br> tags
+        // HardBreak extension (included in StarterKit) will handle rendering these <br> tags
+        const htmlContent = convertNewlinesToBreaks(text)
+
+        // Use TipTap's insertContent command to insert the HTML
+        const editorInstance = editorRef.current
+        if (editorInstance) {
+          editorInstance.chain()
+            .focus()
+            .insertContent(htmlContent)
+            .run()
+          return true
+        }
+
+        return false
+      },
     },
   })
 
   React.useEffect(() => {
     if (editor) {
+      editorRef.current = editor
       onEditorReady(editor)
     }
   }, [editor])
@@ -444,14 +477,16 @@ class Note extends Component<NoteProps, NoteState> {
 
   getContent(): string {
     if (this.editor) {
-      return this.editor.state.doc.textContent
+      // Use getText() which preserves line breaks better than textContent
+      return this.editor.getText()
     }
     return ''
   }
 
   setContent(content: string) {
     if (this.editor) {
-      this.editor.commands.setContent(content)
+      // Convert newlines to <br> tags to preserve line breaks
+      this.editor.commands.setContent(convertNewlinesToBreaks(content))
     }
   }
 
