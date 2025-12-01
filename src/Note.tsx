@@ -65,7 +65,7 @@ const TipTapEditorWrapper: React.FC<TipTapEditorWrapperProps> = ({ initialConten
     if (editor) {
       onEditorReady(editor)
     }
-  }, [editor, onEditorReady])
+  }, [editor])
 
   return editor ? <EditorContent editor={editor} /> : null
 }
@@ -429,13 +429,6 @@ class Note extends Component<NoteProps, NoteState> {
       return
     }
 
-    if (
-      this.editor &&
-      this.props.note.annotations &&
-      prevProps.note.annotations !== this.props.note.annotations
-    ) {
-      setTimeout(() => this.loadAnnotations(), 0)
-    }
   }
 
   shouldComponentUpdate(nextProps: NoteProps, nextState: NoteState) {
