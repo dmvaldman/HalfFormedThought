@@ -230,6 +230,10 @@ button {
   flex-direction: column;
 }
 
+.editor-wrapper {
+  height: 100%;
+}
+
 .editor-empty {
   flex: 1;
   display: flex;

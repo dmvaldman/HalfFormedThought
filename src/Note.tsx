@@ -100,7 +100,7 @@ const TipTapEditorWrapper: React.FC<TipTapEditorWrapperProps> = ({ initialConten
     }
   }, [editor])
 
-  return editor ? <EditorContent editor={editor} /> : null
+  return editor ? <EditorContent editor={editor} className="editor-wrapper" /> : null
 }
 
 // Tool definitions
