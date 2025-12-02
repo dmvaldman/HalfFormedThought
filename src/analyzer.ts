@@ -96,7 +96,7 @@ export class Analyzer {
     // }
   }
 
-  async analyze(currentContent: string, patch: string, title?: string): Promise<void> {
+  async analyze(patch: string, title?: string): Promise<void> {
     if (MOCK) {
       // For mock mode, find the annotate tool and call it with mock data
       const annotateTool = this.tools.find(t => t.function.name === 'annotate')
@@ -124,7 +124,7 @@ export class Analyzer {
     // If this is a new conversation, create first message with preamble + title
     if (this.messages.length === 0) {
       const titleSection = title ? `Title: ${title}\n\n` : ''
-      newUserMessage = `${USER_PROMPT_PREAMBLE}\n\n${titleSection}\n\nInitial Content:\n\n${currentContent}`
+      newUserMessage = `${USER_PROMPT_PREAMBLE}\n\n${titleSection}\n\nInitial Content:\n\n${patch}`
     } else {
       // Otherwise, just use the patch
       const patchSection = patch ? `Patch:\n${patch}` : ''

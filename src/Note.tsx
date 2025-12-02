@@ -547,14 +547,20 @@ class Note extends Component<NoteProps, NoteState> {
 
     const currentContent = this.getContent()
     if (currentContent !== this.initialContent) {
-      const diff = this.getDiff(this.initialContent, currentContent)
+      let diff: string = '';
+
+      if (this.initialContent === '') {
+        diff = currentContent
+      } else {
+        diff = this.getDiff(this.initialContent, currentContent)
+      }
 
       // Show spinner while analyzing
       this.setState({ isAnalyzing: true })
 
       try {
         // Analyze the content change - annotations will be added progressively via onAnnotate tool
-        await this.analyzer.analyze(currentContent, diff, this.props.note.title)
+        await this.analyzer.analyze(diff, this.props.note.title)
 
         this.initialContent = currentContent
       } catch (error) {
