@@ -493,6 +493,7 @@ class Note extends Component<NoteProps, NoteState> {
     // Avoid rerendering the contentEditable on each keystroke; only rerender when
     // note identity changes or annotation-related state changes.
     if (nextProps.note.id !== this.props.note.id) return true
+    if (nextProps.note.title !== this.props.note.title) return true
     if (nextProps.note.annotations !== this.props.note.annotations) return true
     if (nextState.annotations !== this.state.annotations) return true
     if (nextState.openAnnotationId !== this.state.openAnnotationId) return true
