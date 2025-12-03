@@ -2,7 +2,7 @@ import React, { Component } from 'react'
 import { EditorContent, useEditor, Editor as TiptapEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { AnnotationMark } from './AnnotationMark'
-import { NoteType, Annotation, ReferenceAnnotation, ListAnnotation, TextSpanAnnotation } from './types'
+import { NoteType, Annotation, ReferenceAnnotation, ListAnnotation, TextSpanAnnotation, Checkpoint } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer, Tool } from './analyzer'
@@ -984,9 +984,41 @@ class Note extends Component<NoteProps, NoteState> {
             <div className="spinner-icon" />
           </div>
         )}
+        <CheckpointNavigation
+          checkpoints={this.getCheckpoints()}
+          currentCheckpointId={this.checkpointManager.getCurrentCheckpointId()}
+          onCheckpointClick={this.restoreToCheckpoint}
+        />
       </div>
     )
   }
+}
+
+// Checkpoint Navigation Component
+interface CheckpointNavigationProps {
+  checkpoints: Checkpoint[]
+  currentCheckpointId: string | null
+  onCheckpointClick: (checkpointId: string) => void
+}
+
+const CheckpointNavigation = ({ checkpoints, currentCheckpointId, onCheckpointClick }: CheckpointNavigationProps) => {
+  if (checkpoints.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="checkpoint-navigation">
+      {checkpoints.map((checkpoint, index) => (
+        <button
+          key={checkpoint.checkpointId}
+          className={`checkpoint-dot ${currentCheckpointId === checkpoint.checkpointId ? 'active' : ''}`}
+          onClick={() => onCheckpointClick(checkpoint.checkpointId)}
+          aria-label={`Go to checkpoint ${index + 1}`}
+          title={`Checkpoint ${index + 1}`}
+        />
+      ))}
+    </div>
+  )
 }
 
 export default Note

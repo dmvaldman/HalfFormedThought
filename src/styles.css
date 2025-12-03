@@ -505,3 +505,32 @@ button {
   height: 12px;
   stroke: var(--white-pure);
 }
+
+/* Checkpoint Navigation */
+.checkpoint-navigation {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  /* border-top: 1px solid var(--dark-gray); */
+}
+
+.checkpoint-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background-color: var(--medium-gray);
+  cursor: pointer;
+  padding: 0;
+  transition: background-color 0.2s ease;
+}
+
+.checkpoint-dot:hover {
+  background-color: var(--light-gray);
+}
+
+.checkpoint-dot.active {
+  background-color: var(--light-gray);
+}
