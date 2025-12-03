@@ -274,43 +274,28 @@ class Note extends Component<NoteProps, NoteState> {
     return markRange
   }
 
+  // Normalize quotes and dashes for consistent matching (all 1:1 character replacements)
+  private normalizeText(text: string): string {
+    return text
+      .replace(/[""]/g, '"')  // Left/right double quotes to straight quote
+      .replace(/['']/g, "'")  // Left/right single quotes to straight quote
+      .replace(/[\u2013\u2014]/g, '-')  // En/em dashes to hyphen
+  }
+
   // Find textSpan in editor and return selection range
   private findTextSpan(textSpan: string): { from: number; to: number } | null {
     if (!this.editor) return null
 
-    const content = this.editor.state.doc.textContent
+    // getContent() normalizes by default, so AI only sees normalized content
+    // and textSpan will already match. Since normalization is 1:1 character
+    // replacement, index in normalized content = index in original content.
+    const content = this.getContent()
     const index = content.indexOf(textSpan)
-
     if (index === -1) return null
 
-    // Convert character index to ProseMirror positions
-    let from: number | null = null
-    let to: number | null = null
-    let currentPos = 0
-
-    this.editor.state.doc.descendants((node, pos) => {
-      if (node.isText) {
-        const nodeText = node.text || ''
-        const nodeStart = currentPos
-        const nodeEnd = currentPos + nodeText.length
-
-        if (index >= nodeStart && index < nodeEnd) {
-          from = pos + (index - nodeStart)
-        }
-        if (index + textSpan.length > nodeStart && index + textSpan.length <= nodeEnd) {
-          to = pos + (index + textSpan.length - nodeStart)
-        }
-
-        currentPos = nodeEnd
-      }
-      return true
-    })
-
-    // Validate that we found both positions
-    if (from === null || to === null || from >= to) {
-      console.warn('Failed to calculate ProseMirror positions for textSpan:', textSpan)
-      return null
-    }
+    // +1 because ProseMirror positions start at 1 (position 0 is before the document)
+    const from = index + 1
+    const to = from + textSpan.length
 
     return { from, to }
   }
@@ -320,6 +305,12 @@ class Note extends Component<NoteProps, NoteState> {
     if (annotation && annotation.textSpan && this.editor) {
       // Clean the textSpan
       const textSpan = annotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+
+      // Skip if textSpan is empty after cleaning (e.g., if it was just punctuation)
+      if (!textSpan) {
+        console.warn('TextSpan is empty after cleaning, skipping annotation:', annotation.textSpan)
+        return
+      }
 
       // Find textSpan in editor
       const range = this.findTextSpan(textSpan)
@@ -359,7 +350,7 @@ class Note extends Component<NoteProps, NoteState> {
         newAnnotations.set(annotationId, annotationEntry)
         return { annotations: newAnnotations }
       }, () => {
-        this.saveAnnotations()
+        this.saveAnnotation(annotationId)
       })
     }
   }
@@ -416,7 +407,7 @@ class Note extends Component<NoteProps, NoteState> {
         newAnnotations.set(annotationId, annotationEntry)
         return { annotations: newAnnotations }
       }, () => {
-        this.saveAnnotations()
+        this.saveAnnotation(annotationId)
       })
     }
   }
@@ -502,10 +493,12 @@ class Note extends Component<NoteProps, NoteState> {
     return false
   }
 
-  getContent(): string {
+  getContent(normalize: boolean = true): string {
     if (this.editor) {
       // Use getText() which preserves line breaks better than textContent
-      return this.editor.getText()
+      const content = this.editor.getText()
+      // Normalize by default for matching/searching, but preserve original for saving
+      return normalize ? this.normalizeText(content) : content
     }
     return ''
   }
@@ -546,7 +539,7 @@ class Note extends Component<NoteProps, NoteState> {
     if (!this.editor) return
 
 
-    const currentContent = this.getContent()
+    const currentContent = this.getContent(false) // Don't normalize for saving
     if (currentContent !== this.initialContent) {
       let diff: string = '';
 
@@ -576,7 +569,7 @@ class Note extends Component<NoteProps, NoteState> {
   handleContentChange = () => {
     if (!this.editor) return
 
-    const content = this.getContent()
+    const content = this.getContent(false) // Don't normalize for saving
     const contentChanged = content !== this.state.content
 
     this.setState({ content })
@@ -592,151 +585,57 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   // Save annotations to parent (will be stored with note)
-  private saveAnnotations() {
-    if (!this.editor || !this.props.onUpdateAnnotations) return
+  // Get the text span for a specific annotation by finding its mark range
+  private getAnnotationTextSpan(annotationId: string): string | null {
+    if (!this.editor) return null
 
-    const storedAnnotations: TextSpanAnnotation[] = []
-    const processedIds = new Set<string>()
-    // DON'T update state here - just save to parent
-    // The state is already updated by onAnnotate/onExtendList
+    const range = this.annotationIdToRange(annotationId)
+    if (!range) return null
 
-    // Extract annotations from marks and current text content
-    // We need to find the full text span for each annotation (marks can span multiple nodes)
-    this.editor.state.doc.descendants((node, pos) => {
-      if (node.isText && node.marks) {
-        node.marks.forEach(mark => {
-          if (mark.type.name === 'annotation' && mark.attrs.annotationId) {
-            const annotationId = mark.attrs.annotationId
-            const annotationEntry = this.state.annotations.get(annotationId)
-
-            if (!processedIds.has(annotationId)) {
-              // Find the full range of this mark
-              let from = pos
-              let to = pos + node.nodeSize
-
-              // Look ahead to find contiguous nodes with the same mark
-              let currentPos = pos + node.nodeSize
-              this.editor!.state.doc.nodesBetween(currentPos, this.editor!.state.doc.content.size, (nextNode, nextPos) => {
-                if (nextNode.isText && nextNode.marks) {
-                  const hasSameMark = nextNode.marks.some(m =>
-                    m.type.name === 'annotation' && m.attrs.annotationId === annotationId
-                  )
-                  if (hasSameMark) {
-                    to = nextPos + nextNode.nodeSize
-                    return false // Continue searching
-                  }
-                }
-                return true // Stop searching
-              })
-
-              // Get the full text span
-              const textSpan = this.editor!.state.doc.textBetween(from, to)
-
-              // Get annotation data from state if available
-              const annotationEntry = this.state.annotations.get(annotationId)
-              if (annotationEntry) {
-                const serializedEntry: TextSpanAnnotation = {
-                  annotationId,
-                  textSpan,
-                  annotation: annotationEntry.annotation
-                }
-
-                storedAnnotations.push(serializedEntry)
-              }
-
-              processedIds.add(annotationId)
-            }
-          }
-        })
-      }
-      return true
-    })
-
-    // Compare with existing annotations to see if anything changed
-    if (this.annotationsHaveChanged(storedAnnotations)) {
-      // Update parent with annotations only if they changed
-      this.props.onUpdateAnnotations(this.props.note.id, storedAnnotations)
-    }
+    return this.editor.state.doc.textBetween(range.from, range.to)
   }
 
-  // Compare current annotations with stored ones to detect changes
-  private annotationsHaveChanged(currentAnnotations: TextSpanAnnotation[]): boolean {
-    const storedAnnotations = this.props.note.annotations || []
+  // Save a single annotation (add or update)
+  private saveAnnotation(annotationId: string) {
+    if (!this.editor || !this.props.onUpdateAnnotations) return
 
-    // Quick check: different number of annotations means change
-    if (currentAnnotations.length !== storedAnnotations.length) {
-      return true
+    const annotationEntry = this.state.annotations.get(annotationId)
+    if (!annotationEntry) return
+
+    const textSpan = this.getAnnotationTextSpan(annotationId)
+    if (!textSpan) return
+
+    const serializedEntry: TextSpanAnnotation = {
+      annotationId,
+      textSpan,
+      annotation: annotationEntry.annotation
     }
 
-    // Create maps for easier comparison
-    const currentMap = new Map(currentAnnotations.map(a => [a.annotationId, a]))
-    const storedMap = new Map(storedAnnotations.map(a => [a.annotationId, a]))
+    // Get current stored annotations and update/add this one
+    const currentAnnotations = this.props.note.annotations || []
+    const existingIndex = currentAnnotations.findIndex(a => a.annotationId === annotationId)
 
-    // Check if any annotation IDs were added or removed
-    for (const id of currentMap.keys()) {
-      if (!storedMap.has(id)) {
-        return true // New annotation added
-      }
-    }
-    for (const id of storedMap.keys()) {
-      if (!currentMap.has(id)) {
-        return true // Annotation removed
-      }
+    let updatedAnnotations: TextSpanAnnotation[]
+    if (existingIndex >= 0) {
+      // Update existing annotation
+      updatedAnnotations = [...currentAnnotations]
+      updatedAnnotations[existingIndex] = serializedEntry
+    } else {
+      // Add new annotation
+      updatedAnnotations = [...currentAnnotations, serializedEntry]
     }
 
-    // Check if any annotation data changed (same ID but different content)
-    for (const [id, current] of currentMap) {
-      const stored = storedMap.get(id)
-      if (!stored) continue
+    this.props.onUpdateAnnotations(this.props.note.id, updatedAnnotations)
+  }
 
-      // Compare textSpan
-      if (current.textSpan !== stored.textSpan) {
-        return true
-      }
+  // Delete a single annotation from storage
+  private deleteAnnotationFromStorage(annotationId: string) {
+    if (!this.props.onUpdateAnnotations) return
 
-      // Compare annotation data
-      if (current.annotation.type !== stored.annotation.type) {
-        return true
-      }
+    const currentAnnotations = this.props.note.annotations || []
+    const updatedAnnotations = currentAnnotations.filter(a => a.annotationId !== annotationId)
 
-      if (current.annotation.type === 'reference' && stored.annotation.type === 'reference') {
-        const currentRef = current.annotation as ReferenceAnnotation
-        const storedRef = stored.annotation as ReferenceAnnotation
-
-        // Compare records arrays
-        if (currentRef.records.length !== storedRef.records.length) {
-          return true
-        }
-
-        // Deep compare records
-        for (let i = 0; i < currentRef.records.length; i++) {
-          const currentRecord = currentRef.records[i]
-          const storedRecord = storedRef.records[i]
-
-          if (JSON.stringify(currentRecord) !== JSON.stringify(storedRecord)) {
-            return true
-          }
-        }
-      } else if (current.annotation.type === 'list' && stored.annotation.type === 'list') {
-        const currentList = current.annotation as ListAnnotation
-        const storedList = stored.annotation as ListAnnotation
-
-        // Compare extensions arrays
-        if (currentList.extensions.length !== storedList.extensions.length) {
-          return true
-        }
-
-        // Compare extension strings
-        for (let i = 0; i < currentList.extensions.length; i++) {
-          if (currentList.extensions[i] !== storedList.extensions[i]) {
-            return true
-          }
-        }
-      }
-    }
-
-    // No changes detected
-    return false
+    this.props.onUpdateAnnotations(this.props.note.id, updatedAnnotations)
   }
 
   handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -791,8 +690,8 @@ class Note extends Component<NoteProps, NoteState> {
         openAnnotationId: prevState.openAnnotationId === annotationId ? null : prevState.openAnnotationId
       }
     }, () => {
-      // Save annotations after deletion
-      this.saveAnnotations()
+      // Delete annotation from storage
+      this.deleteAnnotationFromStorage(annotationId)
     })
   }
 
@@ -818,8 +717,8 @@ class Note extends Component<NoteProps, NoteState> {
           })
           return { annotations: newAnnotations }
         }, () => {
-          // Save annotations after update
-          this.saveAnnotations()
+          // Save updated annotation
+          this.saveAnnotation(annotationId)
         })
       }
     }
@@ -847,8 +746,8 @@ class Note extends Component<NoteProps, NoteState> {
           })
           return { annotations: newAnnotations }
         }, () => {
-          // Save annotations after update
-          this.saveAnnotations()
+          // Save updated annotation
+          this.saveAnnotation(annotationId)
         })
       }
     }

@@ -2,18 +2,10 @@ import { NoteType } from './types'
 import mockNoteContent from './mock/mockNoteContent'
 
 const MOCK = import.meta.env.VITE_MOCK === 'true'
+const SHOULD_SAVE_NOTES = import.meta.env.VITE_SAVE_NOTES === 'true'
 const STORAGE_KEY = 'half-formed-thought-notes'
 
 function migrateNote(note: any): NoteType {
-  // Migrate from BlockNote format (array of blocks) to plain text
-  if (Array.isArray(note.content)) {
-    // If content is an array (BlockNote format), convert to plain text
-    // This is a simple migration - in the future we might want more sophisticated conversion
-    note.content = ''
-  } else if (typeof note.content !== 'string') {
-    // Ensure content is a string
-    note.content = String(note.content || '')
-  }
   return note
 }
 
@@ -30,22 +22,25 @@ export function loadNotes(): NoteType[] {
     return [initialNote]
   }
 
-  // const stored = localStorage.getItem(STORAGE_KEY)
-  let stored = ''
-  if (!stored) {
+  if (SHOULD_SAVE_NOTES) {
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (!stored) {
+      return []
+    }
+
+    const notes = JSON.parse(stored)
+    const migratedNotes = notes.map(migrateNote)
+    return migratedNotes
+  }
+  else {
     return []
   }
-
-  const notes = JSON.parse(stored)
-  const migratedNotes = notes.map(migrateNote)
-  saveNotes(migratedNotes)
-
-  return migratedNotes
 }
 
 export function saveNotes(notes: NoteType[]): void {
-  // TODO: Re-enable note saving
-  // localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
+  if (SHOULD_SAVE_NOTES) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(notes))
+  }
 }
 
 export function generateId(): string {

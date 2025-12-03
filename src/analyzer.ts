@@ -3,6 +3,7 @@ import { Message, llmService, LLMOptions, ToolCall, ToolResponse } from './LLMSe
 import mockAnnotations from './mock/mockAnnotations.json'
 
 const MOCK = import.meta.env.VITE_MOCK === 'true'
+const SHOULD_SAVE_MESSAGES = import.meta.env.VITE_SAVE_MESSAGES === 'true'
 
 // Tool type definition
 export interface Tool {
@@ -15,19 +16,6 @@ export interface Tool {
   execute: (...args: any[]) => any
 }
 
-// const SYSTEM_PROMPT = `
-// You are a brilliant lateral thinker. A student of history, science, mathematics, philosophy and art.
-// You think in multi-disciplinary analogies, finding provocative insights in the long tail of human thought.
-
-// You have access to tools to help you analyze content:
-// - Use \`getNoteContent\` to read the full current content of the note when you need context or to find exact text spans
-// - Use \`annotate\` to provide annotations for text spans with research sources and insights
-
-// When annotating:
-// - Ensure textSpan is an exact string match to the content (no "..." or correcting spelling or changing punctuation)
-// - Provide 1-3 annotations per text span from diverse perspectives
-// `.trim()
-
 const SYSTEM_PROMPT = `
 You are a brilliant lateral thinker. A student of history, science, mathematics, philosophy and art.
 You think in multi-disciplinary analogies, finding provocative insights in the long tail of human thought.
@@ -39,6 +27,7 @@ You have access to tools to help you analyze content:
 When annotating:
 - We're not going for exhaustive coverage. We want to find the most interesting and provocative insights/extensions. Use your discretion and taste.
 - Ensure textSpan is an exact string match to the content (no "..." or correcting spelling or changing punctuation)
+- Ensure textSpan is not empty. It should match some part of the content.
 - Don't repeat annotations for the same text span
 `.trim()
 
@@ -64,36 +53,41 @@ export class Analyzer {
   constructor(noteID: string, tools: Tool[]) {
     this.noteID = noteID
     this.tools = tools
-    this.messages = this.loadConversation()
+    this.messages = this.loadMessages()
   }
 
-  private loadConversation(): Message[] {
-    // TODO: Re-enable conversation loading
-    // const stored = localStorage.getItem(STORAGE_KEY)
-    // if (!stored) {
-    //   return []
-    // }
+  private loadMessages(): Message[] {
+    if (!SHOULD_SAVE_MESSAGES) {
+      return []
+    }
 
-    // try {
-    //   const parsed = JSON.parse(stored)
-    //   return (parsed[this.noteID] as Message[]) || []
-    // } catch (error) {
-    //   console.error('Error loading conversation:', error)
-    //   return []
-    // }
-    return [] // Always start fresh for debugging
+    const stored = localStorage.getItem(STORAGE_KEY)
+    if (!stored) {
+      return []
+    }
+
+    try {
+      const parsed = JSON.parse(stored)
+      return (parsed[this.noteID] as Message[]) || []
+    } catch (error) {
+      console.error('Error loading conversation:', error)
+      return []
+    }
   }
 
-  private saveConversation(): void {
-    // TODO: Re-enable conversation saving
-    // try {
-    //   const stored = localStorage.getItem(STORAGE_KEY)
-    //   const conversations: Record<string, Message[]> = stored ? JSON.parse(stored) : {}
-    //   conversations[this.noteID] = this.messages
-    //   localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
-    // } catch (error) {
-    //   console.error('Error saving conversation:', error)
-    // }
+  private saveMessages(): void {
+    if (!SHOULD_SAVE_MESSAGES) {
+      return
+    }
+
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY)
+      const conversations: Record<string, Message[]> = stored ? JSON.parse(stored) : {}
+      conversations[this.noteID] = this.messages
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations))
+    } catch (error) {
+      console.error('Error saving conversation:', error)
+    }
   }
 
   async analyze(patch: string, title?: string): Promise<void> {
@@ -222,7 +216,7 @@ export class Analyzer {
       }
 
       // Save conversation
-      this.saveConversation()
+      this.saveMessages()
     } catch (error) {
       console.error('Error analyzing content:', error)
       // Remove the user message if API call failed
@@ -250,7 +244,7 @@ export class Analyzer {
         textSpan: args.textSpan, // Temporary - will be converted to position
         records: args.records
       }
-      console.log('Calling tool.execute with annotation:', annotation)
+      console.log('Calling annotate with:', annotation)
 
       try {
         tool.execute(annotation)
@@ -261,6 +255,7 @@ export class Analyzer {
 
       return { success: true, message: 'Annotation added' }
     } else if (functionName === 'getNoteContent') {
+      console.log('Calling getNoteContent')
       // For getNoteContent, call execute with no arguments
       const content = tool.execute()
       return { content }
@@ -272,7 +267,7 @@ export class Analyzer {
         textSpan: args.textSpan, // Temporary - will be converted to position
         extensions: args.extensions
       }
-      console.log('Calling tool.execute with listExtension:', listExtension)
+      console.log('Calling listExtension with:', listExtension)
 
       try {
         tool.execute(listExtension)
