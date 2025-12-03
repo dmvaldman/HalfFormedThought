@@ -505,12 +505,9 @@ class Note extends Component<NoteProps, NoteState> {
       return
     }
 
-    // Sync marks when annotations or content change
-    if (this.editor && (
-      prevState.annotations !== this.state.annotations ||
-      prevState.content !== this.state.content
-    )) {
-      // Use setTimeout to ensure editor has processed content changes
+    // Sync marks only when annotations change (not on content change - that would disrupt typing)
+    if (this.editor && prevState.annotations !== this.state.annotations) {
+      // Use setTimeout to ensure editor has processed any pending changes
       setTimeout(() => this.syncMarks(), 0)
     }
   }
@@ -624,30 +621,21 @@ class Note extends Component<NoteProps, NoteState> {
     }
   }
 
-  // Save annotations to parent (will be stored with note)
-  // Get the text span for a specific annotation by finding its mark range
-  private getAnnotationTextSpan(annotationId: string): string | null {
-    if (!this.editor) return null
-
-    const range = this.annotationIdToRange(annotationId)
-    if (!range) return null
-
-    return this.editor.state.doc.textBetween(range.from, range.to)
-  }
-
   // Save a single annotation (add or update)
   private saveAnnotation(annotationId: string) {
-    if (!this.editor || !this.props.onUpdateAnnotations) return
+    if (!this.props.onUpdateAnnotations) {
+      return
+    }
 
     const annotationEntry = this.state.annotations.get(annotationId)
-    if (!annotationEntry) return
+    if (!annotationEntry) {
+      return
+    }
 
-    const textSpan = this.getAnnotationTextSpan(annotationId)
-    if (!textSpan) return
-
+    // Use the textSpan from the annotation entry (not from editor marks, which may not exist yet)
     const serializedEntry: TextSpanAnnotation = {
       annotationId,
-      textSpan,
+      textSpan: annotationEntry.textSpan,
       annotation: annotationEntry.annotation
     }
 
@@ -969,8 +957,14 @@ class Note extends Component<NoteProps, NoteState> {
                     initialContent={this.props.note.content || ''}
                     onEditorReady={(editor) => {
                       this.editor = editor
+                      // On editor ready: load annotations from props (storage) if available,
+                      // otherwise sync marks from state (rare case where editor recreated mid-session)
                       if (this.props.note.annotations && this.props.note.annotations.length > 0) {
+                        // Annotations in props (from storage) - load and apply marks
                         setTimeout(() => this.loadAnnotations(), 0)
+                      } else if (this.state.annotations.size > 0) {
+                        // Annotations in state but not in props (editor recreated mid-session) - sync marks
+                        setTimeout(() => this.syncMarks(), 0)
                       }
                     }}
                     onUpdate={() => {
