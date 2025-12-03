@@ -54,6 +54,21 @@ export class Analyzer {
     this.noteID = noteID
     this.tools = tools
     this.messages = this.loadMessages()
+
+    if (this.messages.length > 0) {
+      console.log('Previous Messages:', this.messages)
+    }
+  }
+
+  // Get messages array (for checkpoint creation)
+  getMessages(): Message[] {
+    return this.messages
+  }
+
+  // Truncate messages to a specific index (for checkpoint restoration)
+  truncateMessages(messageIndex: number): void {
+    this.messages = this.messages.slice(0, messageIndex + 1)
+    this.saveMessages()
   }
 
   private loadMessages(): Message[] {

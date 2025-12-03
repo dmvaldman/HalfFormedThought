@@ -6,6 +6,7 @@ import { NoteType, Annotation, ReferenceAnnotation, ListAnnotation, TextSpanAnno
 import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer, Tool } from './analyzer'
+import { CheckpointManager } from './CheckpointManager'
 import { AnnotationPopup } from './AnnotationPopup'
 import ReferenceAnnotationContent from './ReferenceAnnotation'
 import ListAnnotationContent from './ListAnnotation'
@@ -212,6 +213,7 @@ class Note extends Component<NoteProps, NoteState> {
   private annotationLayerRef = React.createRef<HTMLDivElement>()
   private initialContent: string = ''
   private analyzer: Analyzer
+  private checkpointManager: CheckpointManager
   private debouncedContentLogger: () => void
   private editor: TiptapEditor | null = null
 
@@ -224,6 +226,9 @@ class Note extends Component<NoteProps, NoteState> {
       content: props.note.content || '',
       isAnalyzing: false
     }
+
+    // Initialize checkpoint manager
+    this.checkpointManager = new CheckpointManager(props.note.id)
 
     // Define tools with their implementations
     const tools: Tool[] = [
@@ -322,16 +327,6 @@ class Note extends Component<NoteProps, NoteState> {
       // Generate unique ID for this annotation
       const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-      // Apply mark to the text span
-      this.editor.chain()
-        .setTextSelection({ from: range.from, to: range.to })
-        .setMark('annotation', {
-          annotationId,
-          type: 'reference'
-        })
-        .setTextSelection(range.to) // Clear selection
-        .run()
-
       // Store annotation data + text span
       const newAnnotation: ReferenceAnnotation = {
         type: 'reference',
@@ -341,7 +336,8 @@ class Note extends Component<NoteProps, NoteState> {
       const annotationEntry: TextSpanAnnotation = {
         annotationId,
         textSpan,
-        annotation: newAnnotation
+        annotation: newAnnotation,
+        checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
       }
 
       // Add to annotations map using functional setState to avoid batching issues
@@ -379,16 +375,6 @@ class Note extends Component<NoteProps, NoteState> {
       // Generate unique ID for this annotation
       const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
-      // Apply mark to the text span
-      this.editor.chain()
-        .setTextSelection({ from: range.from, to: range.to })
-        .setMark('annotation', {
-          annotationId,
-          type: 'list'
-        })
-        .setTextSelection(range.to) // Clear selection
-        .run()
-
       // Store annotation data + text span
       const newAnnotation: ListAnnotation = {
         type: 'list',
@@ -398,7 +384,8 @@ class Note extends Component<NoteProps, NoteState> {
       const annotationEntry: TextSpanAnnotation = {
         annotationId,
         textSpan,
-        annotation: newAnnotation
+        annotation: newAnnotation,
+        checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
       }
 
       // Add to annotations map using functional setState to avoid batching issues
@@ -423,9 +410,18 @@ class Note extends Component<NoteProps, NoteState> {
       return
     }
 
+    this.applyAnnotations(this.props.note.annotations)
+  }
+
+  // Apply annotations from an array (used by loadAnnotations and restoreToCheckpoint)
+  private applyAnnotations(annotations: TextSpanAnnotation[]) {
+    if (!this.editor) {
+      return
+    }
+
     const annotationsMap = new Map<string, TextSpanAnnotation>()
 
-    this.props.note.annotations.forEach(storedAnnotation => {
+    annotations.forEach(storedAnnotation => {
       const { annotationId, textSpan, annotation } = storedAnnotation
 
       const range = this.findTextSpan(textSpan)
@@ -455,12 +451,42 @@ class Note extends Component<NoteProps, NoteState> {
     this.setState({ annotations: annotationsMap })
   }
 
+  // Sync marks with current annotations state (reactive - marks automatically match state)
+  private syncMarks() {
+    if (!this.editor) {
+      return
+    }
+
+    // Clear all marks first
+    this.editor.chain()
+      .setTextSelection({ from: 0, to: this.editor.state.doc.content.size })
+      .unsetMark('annotation')
+      .setTextSelection(this.editor.state.doc.content.size)
+      .run()
+
+    // Reapply marks for all annotations in state
+    const annotations = Array.from(this.state.annotations.values())
+    annotations.forEach(({ annotationId, textSpan, annotation }) => {
+      const range = this.findTextSpan(textSpan)
+      if (range) {
+        this.editor!.chain()
+          .setTextSelection({ from: range.from, to: range.to })
+          .setMark('annotation', {
+            annotationId,
+            type: annotation.type
+          })
+          .setTextSelection(range.to)
+          .run()
+      }
+    })
+  }
+
   componentDidMount() {
     const initial = this.props.note.content || ''
     this.initialContent = initial
   }
 
-  componentDidUpdate(prevProps: NoteProps) {
+  componentDidUpdate(prevProps: NoteProps, prevState: NoteState) {
     if (prevProps.note.id !== this.props.note.id) {
       const initial = this.props.note.content || ''
       this.setContent(initial)
@@ -477,6 +503,15 @@ class Note extends Component<NoteProps, NoteState> {
         setTimeout(() => this.loadAnnotations(), 0)
       }
       return
+    }
+
+    // Sync marks when annotations or content change
+    if (this.editor && (
+      prevState.annotations !== this.state.annotations ||
+      prevState.content !== this.state.content
+    )) {
+      // Use setTimeout to ensure editor has processed content changes
+      setTimeout(() => this.syncMarks(), 0)
     }
   }
 
@@ -497,8 +532,10 @@ class Note extends Component<NoteProps, NoteState> {
     if (this.editor) {
       // Use getText() which preserves line breaks better than textContent
       const content = this.editor.getText()
+
+      return content
       // Normalize by default for matching/searching, but preserve original for saving
-      return normalize ? this.normalizeText(content) : content
+      // return normalize ? this.normalizeText(content) : content
     }
     return ''
   }
@@ -555,6 +592,9 @@ class Note extends Component<NoteProps, NoteState> {
       try {
         // Analyze the content change - annotations will be added progressively via onAnnotate tool
         await this.analyzer.analyze(diff, this.props.note.title)
+
+        // Create checkpoint after analysis completes
+        this.createCheckpoint()
 
         this.initialContent = currentContent
       } catch (error) {
@@ -643,6 +683,56 @@ class Note extends Component<NoteProps, NoteState> {
     this.props.onUpdateTitle(this.props.note.id, title)
   }
 
+  // Create a checkpoint with current state
+  private createCheckpoint() {
+    const messageIndex = this.analyzer.getMessages().length - 1
+    const content = this.getContent(false)
+    const annotationIds = Array.from(this.state.annotations.keys())
+    this.checkpointManager.createCheckpoint(messageIndex, content, annotationIds)
+  }
+
+  // Get all checkpoints for UI
+  getCheckpoints() {
+    return this.checkpointManager.getCheckpoints()
+  }
+
+  // Restore document to a checkpoint
+  restoreToCheckpoint = (checkpointId: string) => {
+    const restorationData = this.checkpointManager.restoreToCheckpoint(checkpointId, (messageIndex: number) => {
+      // Truncate messages in analyzer
+      this.analyzer.truncateMessages(messageIndex)
+    })
+    if (!restorationData) {
+      console.warn('Checkpoint not found:', checkpointId)
+      return
+    }
+
+    // Restore content
+    this.setContent(restorationData.content)
+    this.initialContent = restorationData.content
+
+    // Filter annotations to only those in the checkpoint
+    const newAnnotations = new Map<string, TextSpanAnnotation>()
+    restorationData.annotationIds.forEach(id => {
+      const annotation = this.state.annotations.get(id)
+      if (annotation) {
+        newAnnotations.set(id, annotation)
+      }
+    })
+
+    // Update saved annotations
+    if (this.props.onUpdateAnnotations) {
+      const savedAnnotations = Array.from(newAnnotations.values())
+      this.props.onUpdateAnnotations(this.props.note.id, savedAnnotations)
+    }
+
+    // Just update state - componentDidUpdate will sync marks automatically
+    this.setState({
+      annotations: newAnnotations,
+      content: restorationData.content
+    })
+  }
+
   handleAnnotationPopupOpen = (annotationId: string) => {
     this.setState({ openAnnotationId: annotationId })
   }
@@ -669,19 +759,8 @@ class Note extends Component<NoteProps, NoteState> {
   handleDeleteAnnotation = (annotationId: string) => {
     if (!this.editor) return
 
-    // Find the mark range in the document
-    const markRange = this.annotationIdToRange(annotationId)
-
-    // Remove mark from document if found
-    if (markRange) {
-      this.editor.chain()
-        .setTextSelection({ from: markRange.from, to: markRange.to })
-        .unsetMark('annotation')
-        .setTextSelection(markRange.to) // Clear selection
-        .run()
-    }
-
     // Remove from annotations map using functional setState
+    // syncMarks() will automatically remove the mark when state updates
     this.setState(prevState => {
       const newAnnotations = new Map(prevState.annotations)
       newAnnotations.delete(annotationId)

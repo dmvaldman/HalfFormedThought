@@ -31,6 +31,16 @@ export interface TextSpanAnnotation {
   annotationId: string
   textSpan: string // Exact text that is annotated
   annotation: Annotation // Annotation metadata (records/extensions)
+  checkpointId?: string // Which checkpoint created this annotation
+}
+
+// Checkpoint for time travel - stores state snapshot
+export interface Checkpoint {
+  checkpointId: string
+  messageIndex: number // Index in messages array (after tool calls)
+  timestamp: number
+  content: string // Document content at this point
+  annotationIds: string[] // Annotations that existed at this point
 }
 
 export interface NoteType {
