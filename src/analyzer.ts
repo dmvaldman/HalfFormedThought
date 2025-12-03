@@ -105,7 +105,7 @@ export class Analyzer {
     }
   }
 
-  async analyze(patch: string, title?: string): Promise<void> {
+  async analyze(patch: string, title?: string): Promise<boolean> {
     if (MOCK) {
       // For mock mode, find the annotate tool and call it with mock data
       const annotateTool = this.tools.find(t => t.function.name === 'annotate')
@@ -117,7 +117,7 @@ export class Analyzer {
           annotateTool.execute(annotation)
         })
       }
-      return
+      return true // Mock mode always creates annotations
     }
 
     console.log('analyzing...')
@@ -143,6 +143,8 @@ export class Analyzer {
     // Add user message to messages
     this.messages.push({ role: 'user', content: newUserMessage })
     console.log('User message:\n\n', newUserMessage)
+
+    let toolCallsExecuted = false
 
     try {
       let finishReason: string | null = null
@@ -184,6 +186,8 @@ export class Analyzer {
 
         // Check if finish_reason indicates tool calls
         if (finishReason === "tool_calls") {
+          toolCallsExecuted = true // Mark that tool calls were executed
+
           // Add assistant message with tool calls to messages
           const assistantMessage = {
             role: 'assistant',
@@ -232,6 +236,8 @@ export class Analyzer {
 
       // Save conversation
       this.saveMessages()
+
+      return toolCallsExecuted
     } catch (error) {
       console.error('Error analyzing content:', error)
       // Remove the user message if API call failed

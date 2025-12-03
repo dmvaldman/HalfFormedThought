@@ -588,10 +588,12 @@ class Note extends Component<NoteProps, NoteState> {
 
       try {
         // Analyze the content change - annotations will be added progressively via onAnnotate tool
-        await this.analyzer.analyze(diff, this.props.note.title)
+        const neededAnalysis = await this.analyzer.analyze(diff, this.props.note.title)
 
-        // Create checkpoint after analysis completes
-        this.createCheckpoint()
+        // Only create checkpoint if tool calls were executed (i.e., annotations were created)
+        if (neededAnalysis) {
+          this.createCheckpoint()
+        }
 
         this.initialContent = currentContent
       } catch (error) {
