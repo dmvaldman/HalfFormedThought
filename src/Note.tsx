@@ -530,9 +530,8 @@ class Note extends Component<NoteProps, NoteState> {
       // Use getText() which preserves line breaks better than textContent
       const content = this.editor.getText()
 
-      return content
       // Normalize by default for matching/searching, but preserve original for saving
-      // return normalize ? this.normalizeText(content) : content
+      return normalize ? this.normalizeText(content) : content
     }
     return ''
   }
@@ -701,24 +700,32 @@ class Note extends Component<NoteProps, NoteState> {
     this.setContent(restorationData.content)
     this.initialContent = restorationData.content
 
-    // Filter annotations to only those in the checkpoint
-    const newAnnotations = new Map<string, TextSpanAnnotation>()
-    restorationData.annotationIds.forEach(id => {
-      const annotation = this.state.annotations.get(id)
-      if (annotation) {
-        newAnnotations.set(id, annotation)
-      }
-    })
-
-    // Update saved annotations
-    if (this.props.onUpdateAnnotations) {
-      const savedAnnotations = Array.from(newAnnotations.values())
-      this.props.onUpdateAnnotations(this.props.note.id, savedAnnotations)
+    // Save restored content to storage
+    if (this.props.onUpdateContent) {
+      this.props.onUpdateContent(this.props.note.id, restorationData.content)
     }
 
-    // Just update state - componentDidUpdate will sync marks automatically
+    // Filter annotations to only those in the checkpoint
+    // Use stored annotations from props (which have all annotation data)
+    const checkpointAnnotationIds = new Set(restorationData.annotationIds)
+    const filteredAnnotations = (this.props.note.annotations || []).filter(
+      ann => checkpointAnnotationIds.has(ann.annotationId)
+    )
+
+    // Update saved annotations (only those from the checkpoint)
+    if (this.props.onUpdateAnnotations) {
+      this.props.onUpdateAnnotations(this.props.note.id, filteredAnnotations)
+    }
+
+    // Convert filtered annotations array to Map for state
+    const annotationsMap = new Map<string, TextSpanAnnotation>()
+    filteredAnnotations.forEach(ann => {
+      annotationsMap.set(ann.annotationId, ann)
+    })
+
+    // Update state - componentDidUpdate will sync marks automatically
     this.setState({
-      annotations: newAnnotations,
+      annotations: annotationsMap,
       content: restorationData.content
     })
   }
