@@ -58,11 +58,44 @@ class App extends Component<{}, AppState> {
       newCurrentNoteId = updatedNotes.length > 0 ? updatedNotes[0].id : null
     }
 
+    // Clean up associated messages and checkpoints from localStorage
+    this.cleanupNoteData(noteId)
+
     this.setState({
       notes: updatedNotes,
       currentNoteId: newCurrentNoteId,
     })
     saveNotes(updatedNotes)
+  }
+
+  // Clean up messages and checkpoints for a deleted note
+  private cleanupNoteData(noteId: string) {
+    const SHOULD_SAVE_MESSAGES = import.meta.env.VITE_SAVE_MESSAGES === 'true'
+    if (!SHOULD_SAVE_MESSAGES) {
+      return
+    }
+
+    try {
+      // Clean up messages
+      const messagesKey = 'half-formed-thought-conversations'
+      const storedMessages = localStorage.getItem(messagesKey)
+      if (storedMessages) {
+        const conversations: Record<string, any> = JSON.parse(storedMessages)
+        delete conversations[noteId]
+        localStorage.setItem(messagesKey, JSON.stringify(conversations))
+      }
+
+      // Clean up checkpoints
+      const checkpointsKey = `${messagesKey}-checkpoints`
+      const storedCheckpoints = localStorage.getItem(checkpointsKey)
+      if (storedCheckpoints) {
+        const allCheckpoints: Record<string, any> = JSON.parse(storedCheckpoints)
+        delete allCheckpoints[noteId]
+        localStorage.setItem(checkpointsKey, JSON.stringify(allCheckpoints))
+      }
+    } catch (error) {
+      console.error('Error cleaning up note data:', error)
+    }
   }
 
   handleUpdateTitle = (noteId: string, title: string) => {
