@@ -312,6 +312,7 @@ class Note extends Component<NoteProps, NoteState> {
   // Tool method for Kimi to call when it wants to annotate text spans
   private onAnnotate = (annotation: any): void => {
     if (!annotation || !annotation.textSpan || !this.editor) {
+      console.warn('Invalid annotation parameters:', annotation)
       throw new Error('Invalid annotation parameters')
     }
 
@@ -320,12 +321,14 @@ class Note extends Component<NoteProps, NoteState> {
 
     // Skip if textSpan is empty after cleaning (e.g., if it was just punctuation)
     if (!textSpan) {
+      console.warn('TextSpan is empty after cleaning, skipping annotation:', annotation.textSpan)
       throw new Error('TextSpan is empty after cleaning')
     }
 
     // Find textSpan in editor
     const range = this.findTextSpan(textSpan)
     if (!range) {
+      console.warn('Could not find textSpan in editor:', textSpan)
       throw new Error('TextSpan not found in content.')
     }
 
@@ -366,6 +369,7 @@ class Note extends Component<NoteProps, NoteState> {
   // Tool method for Kimi to call when it wants to extend a list
   private onExtendList = (listAnnotation: any): void => {
     if (!listAnnotation || !listAnnotation.extensions || listAnnotation.extensions.length === 0 || !listAnnotation.textSpan || !this.editor) {
+      console.warn('Invalid list extension parameters:', listAnnotation)
       throw new Error('Invalid list extension parameters')
     }
 
@@ -375,6 +379,7 @@ class Note extends Component<NoteProps, NoteState> {
     // Find textSpan in editor
     const range = this.findTextSpan(textSpan)
     if (!range) {
+      console.warn('Could not find textSpan in editor:', textSpan)
       throw new Error('TextSpan not found in content.')
     }
 
