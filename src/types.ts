@@ -52,4 +52,3 @@ export interface NoteType {
   updatedAt: number
 }
 
-

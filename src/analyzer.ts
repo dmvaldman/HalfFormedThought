@@ -201,16 +201,30 @@ export class Analyzer {
           for (const toolCall of response.tool_calls) {
             const toolCallName = toolCall.function.name
 
-            const result = await this.executeTool(toolCall)
+            try {
+              const result = await this.executeTool(toolCall)
+              // Format successful result as JSON
+              const content = JSON.stringify(result)
 
-            // Construct tool message with tool_call_id and name (as per Kimi docs)
-            // The tool_call_id and name are required for Kimi to match the tool call correctly
-            toolResponses.push({
-              tool_call_id: toolCall.id,
-              role: 'tool',
-              name: toolCallName,
-              content: JSON.stringify(result)
-            })
+              // Construct tool message with tool_call_id and name (as per Kimi docs)
+              // The tool_call_id and name are required for Kimi to match the tool call correctly
+              toolResponses.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                name: toolCallName,
+                content
+              })
+            } catch (error) {
+              // Catch errors and send error message to LLM so it can retry with different parameters
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+
+              toolResponses.push({
+                tool_call_id: toolCall.id,
+                role: 'tool',
+                name: toolCallName,
+                content: errorMessage
+              })
+            }
           }
 
           // Add tool responses to messages
@@ -256,51 +270,44 @@ export class Analyzer {
       throw new Error(`Unknown tool: ${functionName}`)
     }
 
-    // Execute the tool with appropriate arguments
-    if (functionName === 'annotate') {
-      // For annotate, args.records is already an array of 1-3 record objects
-      // Note: textSpan will be converted to position in onAnnotate
-      const annotation: any = {
-        type: 'reference',
-        textSpan: args.textSpan, // Temporary - will be converted to position
-        records: args.records
-      }
-      console.log('Calling annotate with:', annotation)
+    try {
+      // Execute the tool with appropriate arguments
+      if (functionName === 'annotate') {
+        // For annotate, args.records is already an array of 1-3 record objects
+        // Note: textSpan will be converted to position in onAnnotate
+        const annotation: any = {
+          type: 'reference',
+          textSpan: args.textSpan, // Temporary - will be converted to position
+          records: args.records
+        }
+        console.log('Calling annotate with:', annotation)
 
-      try {
         tool.execute(annotation)
-      } catch (error) {
-        console.error('Error executing tool:', error)
-        throw error
-      }
+        return { success: true, message: 'Annotation added' }
+      } else if (functionName === 'getNoteContent') {
+        console.log('Calling getNoteContent')
+        // For getNoteContent, call execute with no arguments
+        const content = tool.execute()
+        return { content }
+      } else if (functionName === 'extendList') {
+        // For extendList, create ListAnnotation object
+        // Note: textSpan will be converted to position in onExtendList
+        const listExtension: any = {
+          type: 'list',
+          textSpan: args.textSpan, // Temporary - will be converted to position
+          extensions: args.extensions
+        }
+        console.log('Calling listExtension with:', listExtension)
 
-      return { success: true, message: 'Annotation added' }
-    } else if (functionName === 'getNoteContent') {
-      console.log('Calling getNoteContent')
-      // For getNoteContent, call execute with no arguments
-      const content = tool.execute()
-      return { content }
-    } else if (functionName === 'extendList') {
-      // For extendList, create ListAnnotation object
-      // Note: textSpan will be converted to position in onExtendList
-      const listExtension: any = {
-        type: 'list',
-        textSpan: args.textSpan, // Temporary - will be converted to position
-        extensions: args.extensions
-      }
-      console.log('Calling listExtension with:', listExtension)
-
-      try {
         tool.execute(listExtension)
-      } catch (error) {
-        console.error('Error executing tool:', error)
-        throw error
+        return { success: true, message: 'List extension added' }
+      } else {
+        // For other tools, call execute with args
+        return tool.execute(args)
       }
-
-      return { success: true, message: 'List extension added' }
-    } else {
-      // For other tools, call execute with args
-      return tool.execute(args)
+    } catch (error) {
+      // Re-throw the error so it can be caught and formatted for the LLM
+      throw error
     }
   }
 }

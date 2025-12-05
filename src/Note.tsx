@@ -282,73 +282,77 @@ class Note extends Component<NoteProps, NoteState> {
   // Normalize quotes and dashes for consistent matching (all 1:1 character replacements)
   private normalizeText(text: string): string {
     return text
-      .replace(/[""]/g, '"')  // Left/right double quotes to straight quote
-      .replace(/['']/g, "'")  // Left/right single quotes to straight quote
-      .replace(/[\u2013\u2014]/g, '-')  // En/em dashes to hyphen
+      .replace(/\u201C/g, '"')  // Left double quote (") to straight quote
+      .replace(/\u201D/g, '"')  // Right double quote (") to straight quote
+      .replace(/\u2018/g, "'")  // Left single quote (') to straight quote
+      .replace(/\u2019/g, "'")  // Right single quote (') to straight quote
+      .replace(/\u2013/g, '-')  // En dash (–) to hyphen
+      .replace(/\u2014/g, '-')  // Em dash (—) to hyphen
+      .replace(/\u2015/g, '-')  // Horizontal bar (―) to hyphen
   }
 
   // Find textSpan in editor and return selection range
   private findTextSpan(textSpan: string): { from: number; to: number } | null {
     if (!this.editor) return null
 
-    // getContent() normalizes by default, so AI only sees normalized content
-    // and textSpan will already match. Since normalization is 1:1 character
-    // replacement, index in normalized content = index in original content.
-    const content = this.getContent()
-    const index = content.indexOf(textSpan)
+    // Normalize both content and textSpan to ensure matching works correctly
+    // Normalization is 1:1 character replacement, so index in normalized content = index in original content
+    const content = this.getContent() // Already normalized by default
+    const normalizedTextSpan = this.normalizeText(textSpan) // Normalize textSpan as well (LLM may output curly quotes/dashes)
+    const index = content.indexOf(normalizedTextSpan)
     if (index === -1) return null
 
     // +1 because ProseMirror positions start at 1 (position 0 is before the document)
     const from = index + 1
-    const to = from + textSpan.length
+    const to = from + normalizedTextSpan.length
 
     return { from, to }
   }
 
   // Tool method for Kimi to call when it wants to annotate text spans
-  private onAnnotate = (annotation: any) => {
-    if (annotation && annotation.textSpan && this.editor) {
-      // Clean the textSpan
-      const textSpan = annotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
-
-      // Skip if textSpan is empty after cleaning (e.g., if it was just punctuation)
-      if (!textSpan) {
-        console.warn('TextSpan is empty after cleaning, skipping annotation:', annotation.textSpan)
-        return
-      }
-
-      // Find textSpan in editor
-      const range = this.findTextSpan(textSpan)
-      if (!range) {
-        console.warn('Could not find textSpan in editor:', textSpan)
-        return
-      }
-
-      // Generate unique ID for this annotation
-      const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-      // Store annotation data + text span
-      const newAnnotation: ReferenceAnnotation = {
-        type: 'reference',
-        records: annotation.records
-      }
-
-      const annotationEntry: TextSpanAnnotation = {
-        annotationId,
-        textSpan,
-        annotation: newAnnotation,
-        checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
-      }
-
-      // Add to annotations map using functional setState to avoid batching issues
-      this.setState(prevState => {
-        const newAnnotations = new Map(prevState.annotations)
-        newAnnotations.set(annotationId, annotationEntry)
-        return { annotations: newAnnotations }
-      }, () => {
-        this.saveAnnotation(annotationId)
-      })
+  private onAnnotate = (annotation: any): void => {
+    if (!annotation || !annotation.textSpan || !this.editor) {
+      throw new Error('Invalid annotation parameters')
     }
+
+    // Clean the textSpan
+    const textSpan = annotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+
+    // Skip if textSpan is empty after cleaning (e.g., if it was just punctuation)
+    if (!textSpan) {
+      throw new Error('TextSpan is empty after cleaning')
+    }
+
+    // Find textSpan in editor
+    const range = this.findTextSpan(textSpan)
+    if (!range) {
+      throw new Error('TextSpan not found in content.')
+    }
+
+    // Generate unique ID for this annotation
+    const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+    // Store annotation data + text span
+    const newAnnotation: ReferenceAnnotation = {
+      type: 'reference',
+      records: annotation.records
+    }
+
+    const annotationEntry: TextSpanAnnotation = {
+      annotationId,
+      textSpan,
+      annotation: newAnnotation,
+      checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
+    }
+
+    // Add to annotations map using functional setState to avoid batching issues
+    this.setState(prevState => {
+      const newAnnotations = new Map(prevState.annotations)
+      newAnnotations.set(annotationId, annotationEntry)
+      return { annotations: newAnnotations }
+    }, () => {
+      this.saveAnnotation(annotationId)
+    })
   }
 
   // Tool method for Kimi to get the current note content
@@ -360,43 +364,44 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   // Tool method for Kimi to call when it wants to extend a list
-  private onExtendList = (listAnnotation: any) => {
-    if (listAnnotation && listAnnotation.extensions && listAnnotation.extensions.length > 0 && listAnnotation.textSpan && this.editor) {
-      // Clean the textSpan
-      const textSpan = listAnnotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
-
-      // Find textSpan in editor
-      const range = this.findTextSpan(textSpan)
-      if (!range) {
-        console.warn('Could not find textSpan in editor:', textSpan)
-        return
-      }
-
-      // Generate unique ID for this annotation
-      const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-      // Store annotation data + text span
-      const newAnnotation: ListAnnotation = {
-        type: 'list',
-        extensions: listAnnotation.extensions
-      }
-
-      const annotationEntry: TextSpanAnnotation = {
-        annotationId,
-        textSpan,
-        annotation: newAnnotation,
-        checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
-      }
-
-      // Add to annotations map using functional setState to avoid batching issues
-      this.setState(prevState => {
-        const newAnnotations = new Map(prevState.annotations)
-        newAnnotations.set(annotationId, annotationEntry)
-        return { annotations: newAnnotations }
-      }, () => {
-        this.saveAnnotation(annotationId)
-      })
+  private onExtendList = (listAnnotation: any): void => {
+    if (!listAnnotation || !listAnnotation.extensions || listAnnotation.extensions.length === 0 || !listAnnotation.textSpan || !this.editor) {
+      throw new Error('Invalid list extension parameters')
     }
+
+    // Clean the textSpan
+    const textSpan = listAnnotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+
+    // Find textSpan in editor
+    const range = this.findTextSpan(textSpan)
+    if (!range) {
+      throw new Error('TextSpan not found in content.')
+    }
+
+    // Generate unique ID for this annotation
+    const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+    // Store annotation data + text span
+    const newAnnotation: ListAnnotation = {
+      type: 'list',
+      extensions: listAnnotation.extensions
+    }
+
+    const annotationEntry: TextSpanAnnotation = {
+      annotationId,
+      textSpan,
+      annotation: newAnnotation,
+      checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
+    }
+
+    // Add to annotations map using functional setState to avoid batching issues
+    this.setState(prevState => {
+      const newAnnotations = new Map(prevState.annotations)
+      newAnnotations.set(annotationId, annotationEntry)
+      return { annotations: newAnnotations }
+    }, () => {
+      this.saveAnnotation(annotationId)
+    })
   }
 
   // Load annotations from stored note data and reapply marks
@@ -696,14 +701,8 @@ class Note extends Component<NoteProps, NoteState> {
       return
     }
 
-    // Restore content
-    this.setContent(restorationData.content)
+    // Update initialContent BEFORE setContent to prevent handleContentChange from saving old content
     this.initialContent = restorationData.content
-
-    // Save restored content to storage
-    if (this.props.onUpdateContent) {
-      this.props.onUpdateContent(this.props.note.id, restorationData.content)
-    }
 
     // Filter annotations to only those in the checkpoint
     // Use stored annotations from props (which have all annotation data)
@@ -723,10 +722,19 @@ class Note extends Component<NoteProps, NoteState> {
       annotationsMap.set(ann.annotationId, ann)
     })
 
-    // Update state - componentDidUpdate will sync marks automatically
+    // Update state with restored content and annotations BEFORE setContent
+    // This ensures handleContentChange sees the new content and doesn't save old content
     this.setState({
       annotations: annotationsMap,
       content: restorationData.content
+    }, () => {
+      // After state is updated, set editor content and save to storage
+      this.setContent(restorationData.content)
+
+      // Save restored content to storage
+      if (this.props.onUpdateContent) {
+        this.props.onUpdateContent(this.props.note.id, restorationData.content)
+      }
     })
   }
 
