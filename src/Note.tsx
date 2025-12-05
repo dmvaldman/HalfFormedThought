@@ -431,7 +431,7 @@ class Note extends Component<NoteProps, NoteState> {
 
     const annotationsMap = new Map<string, TextSpanAnnotation>()
 
-    annotations.forEach(storedAnnotation => {
+    annotations.forEach((storedAnnotation) => {
       const { annotationId, textSpan, annotation } = storedAnnotation
 
       const range = this.findTextSpan(textSpan)
@@ -449,11 +449,10 @@ class Note extends Component<NoteProps, NoteState> {
         .setTextSelection(range.to)
         .run()
 
-      const actualTextSpan = this.editor!.state.doc.textBetween(range.from, range.to)
-
+      // Use the original stored textSpan, not the extracted one (which loses newlines)
       annotationsMap.set(annotationId, {
         annotationId,
-        textSpan: actualTextSpan,
+        textSpan: textSpan, // Keep original textSpan from storage
         annotation
       })
     })
