@@ -383,41 +383,33 @@ button {
   border: none;
   color: var(--light-gray);
   cursor: pointer;
-  padding: 4px;
-  font-size: 14px;
-  line-height: 1;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .annotation-popup-pin-icon {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
   display: block;
-  fill: none;
-  stroke: var(--white-pure);
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.annotation-popup-pin.active {
-  color: var(--accent-cyan);
-}
-
-.annotation-popup-pin.active .annotation-popup-pin-icon {
-  fill: var(--white-pure);
-}
-
-.annotation-popup-pin:hover {
-  color: var(--white-pure);
+  fill: var(--light-gray);
 }
 
 .annotation-popup-close {
   background: none;
   border: none;
   color: var(--light-gray);
-  font-size: 16px;
+  font-size: 22px;
   cursor: pointer;
-  padding: 4px;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   line-height: 1;
 }
 

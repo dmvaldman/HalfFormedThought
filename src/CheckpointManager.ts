@@ -11,6 +11,11 @@ export class CheckpointManager {
   constructor(noteID: string) {
     this.noteID = noteID
     this.checkpoints = this.loadCheckpoints()
+    // Set current checkpoint to the last one (most recent) if checkpoints exist
+    if (this.checkpoints.length > 0) {
+      const lastCheckpoint = this.checkpoints[this.checkpoints.length - 1]
+      this.currentCheckpointId = lastCheckpoint.checkpointId
+    }
   }
 
   // Get current checkpoint ID (for associating annotations)
