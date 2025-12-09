@@ -79,21 +79,21 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     if (this.state.isPinned) return
 
     const popupElement = this.popupRef.current
-    const target = e.target as Node
+    const target = e.target as HTMLElement
 
-    // Check if click is outside popup
+    // Check if click is inside popup
     if (popupElement && popupElement.contains(target)) {
       return // Click is inside popup
     }
 
-    // Check if click is in the editor (TipTap handles mark clicks)
-    const editorElement = document.querySelector('.editor-content')
-    if (editorElement && editorElement.contains(target)) {
-      // Click is in the editor - TipTap will handle mark clicks
-      return
+    // Check if click is on a mark (has data-annotation-id attribute)
+    // TipTap will handle mark clicks separately, so we don't want to close here
+    const markElement = target.closest('span[data-annotation-id]')
+    if (markElement) {
+      return // Click is on a mark - TipTap will handle it
     }
 
-    // Click is outside both popup and editor
+    // Click is outside popup and not on a mark - close the popup
     this.props.onPopupClose()
   }
 
