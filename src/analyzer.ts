@@ -38,7 +38,7 @@ Research these ideas and provide places to extend/elaborate on them from a diver
 
 const PATCH_PROMPT_PREAMBLE = `
 Here's an update to the essay in the form of a patch. Anything to add?
-If no significant changes have been made since the last analysis, or the user appears to be mid-edit, just exit by returning an empty array.
+If no significant changes have been made since the last analysis, or the user appears to be mid-edit, or simply rearranging content,just exit by returning an empty array.
 `.trim()
 
 // Conversation storage key
