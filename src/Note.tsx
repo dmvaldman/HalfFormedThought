@@ -387,13 +387,19 @@ class Note extends Component<NoteProps, NoteState> {
       this.setState({ isAnalyzing: true })
 
       try {
-        // Analyze the content change - pass currentContent for getNoteContent tool
-        const result = await this.analyzer.analyze(diff, currentContent, this.props.note.title)
+        // Analyze the content change - pass callback for progressive annotation updates
+        const result = await this.analyzer.analyze(
+          diff,
+          currentContent,
+          this.props.note.title,
+          // Progressive callback - add each annotation as it arrives
+          (noteId, annotation) => {
+            this.addAnnotationsFromResults(noteId, [annotation])
+          }
+        )
 
-        // Add annotations from results - routed to the correct note via result.noteId
-        if (result.annotations.length > 0) {
-          this.addAnnotationsFromResults(result.noteId, result.annotations)
-        }
+        // Note: annotations are already added progressively via callback above
+        // The final result.annotations is the complete list (for reference/logging)
 
         // Only create checkpoint if tool calls were executed and we're still on the same note
         if (result.toolCallsExecuted && result.noteId === this.props.note.id) {

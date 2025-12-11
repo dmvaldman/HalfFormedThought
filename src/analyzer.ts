@@ -214,7 +214,12 @@ export class Analyzer {
     }
   }
 
-  async analyze(patch: string, currentContent: string, title?: string): Promise<AnalyzeResult> {
+  async analyze(
+    patch: string,
+    currentContent: string,
+    title?: string,
+    onAnnotation?: (noteId: string, annotation: AnnotationResult) => void
+  ): Promise<AnalyzeResult> {
     // Store current content for getNoteContent tool
     this.currentContent = currentContent
 
@@ -228,11 +233,16 @@ export class Analyzer {
       // For mock mode, return mock data as annotations
       const mockData = mockAnnotations as any[]
       mockData.forEach(annotation => {
-        collectedAnnotations.push({
+        const result: AnnotationResult = {
           type: 'reference',
           textSpan: annotation.textSpan,
           records: annotation.records
-        })
+        }
+        collectedAnnotations.push(result)
+        // Notify immediately for progressive updates
+        if (onAnnotation) {
+          onAnnotation(this.noteID, result)
+        }
       })
       return { noteId: this.noteID, annotations: collectedAnnotations, toolCallsExecuted: true }
     }
@@ -314,7 +324,7 @@ export class Analyzer {
             const toolCallName = toolCall.function.name
 
             try {
-              const result = this.executeTool(toolCall, collectedAnnotations)
+              const result = this.executeTool(toolCall, collectedAnnotations, onAnnotation)
               // Format successful result as JSON
               const content = JSON.stringify(result)
 
@@ -380,7 +390,11 @@ export class Analyzer {
   }
 
   // Execute a tool call and return the result (also collects annotations)
-  private executeTool(toolCall: ToolCall, collectedAnnotations: AnnotationResult[]): any {
+  private executeTool(
+    toolCall: ToolCall,
+    collectedAnnotations: AnnotationResult[],
+    onAnnotation?: (noteId: string, annotation: AnnotationResult) => void
+  ): any {
     const functionName = toolCall.function.name
     const args = JSON.parse(toolCall.function.arguments || '{}')
 
@@ -392,12 +406,19 @@ export class Analyzer {
 
       console.log('Annotate:', { textSpan, records: args.records })
 
-      // Collect the annotation - Note will handle validation and storage
-      collectedAnnotations.push({
+      const annotation: AnnotationResult = {
         type: 'reference',
         textSpan,
         records: args.records
-      })
+      }
+
+      // Collect the annotation
+      collectedAnnotations.push(annotation)
+
+      // Notify immediately for progressive updates
+      if (onAnnotation) {
+        onAnnotation(this.noteID, annotation)
+      }
 
       return { success: true, message: 'Annotation added' }
     } else if (functionName === 'getNoteContent') {
@@ -414,12 +435,19 @@ export class Analyzer {
 
       console.log('ExtendList:', { textSpan, extensions: args.extensions })
 
-      // Collect the annotation - Note will handle validation and storage
-      collectedAnnotations.push({
+      const annotation: AnnotationResult = {
         type: 'list',
         textSpan,
         extensions: args.extensions
-      })
+      }
+
+      // Collect the annotation
+      collectedAnnotations.push(annotation)
+
+      // Notify immediately for progressive updates
+      if (onAnnotation) {
+        onAnnotation(this.noteID, annotation)
+      }
 
       return { success: true, message: 'List extension added' }
     } else {
