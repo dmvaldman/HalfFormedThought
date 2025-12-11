@@ -29,6 +29,7 @@ export type Annotation = ReferenceAnnotation | ListAnnotation
 // Text span annotation entry (stored + in-memory representation)
 export interface TextSpanAnnotation {
   annotationId: string
+  noteId: string // Which note this annotation belongs to
   textSpan: string // Exact text that is annotated
   annotation: Annotation // Annotation metadata (records/extensions)
   checkpointId?: string // Which checkpoint created this annotation
@@ -47,7 +48,6 @@ export interface NoteType {
   id: string
   title: string
   content: string // Plain text content
-  annotations?: TextSpanAnnotation[] // Stored annotations
   createdAt: number
   updatedAt: number
 }

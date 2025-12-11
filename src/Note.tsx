@@ -2,10 +2,10 @@ import React, { Component } from 'react'
 import { EditorContent, useEditor, Editor as TiptapEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { AnnotationMark } from './AnnotationMark'
-import { NoteType, Annotation, ReferenceAnnotation, ListAnnotation, TextSpanAnnotation, Checkpoint } from './types'
+import { NoteType, ReferenceAnnotation, ListAnnotation, TextSpanAnnotation, Checkpoint } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
-import { Analyzer, Tool } from './analyzer'
+import { Analyzer, AnnotationResult } from './analyzer'
 import { CheckpointManager } from './CheckpointManager'
 import { AnnotationPopup } from './AnnotationPopup'
 import ReferenceAnnotationContent from './ReferenceAnnotation'
@@ -104,105 +104,15 @@ const TipTapEditorWrapper: React.FC<TipTapEditorWrapperProps> = ({ initialConten
   return editor ? <EditorContent editor={editor} className="editor-wrapper" /> : null
 }
 
-// Tool definitions
-const ANNOTATE_TOOL = {
-  type: 'function',
-  function: {
-    name: 'annotate',
-    description: 'Annotate a text span with research sources and insights. Call this tool multiple times to annotate different text spans. Each call should annotate one text span.',
-    parameters: {
-      type: 'object',
-      properties: {
-        textSpan: {
-          type: 'string',
-          description: 'The exact span of text being annotated. Must be an exact string match to the content (no "...", correcting spelling/punctuation or starting/ending with punctuation/whitespace).'
-        },
-        records: {
-          type: 'array',
-          minItems: 1,
-          maxItems: 3,
-          description: 'Array of 1-3 record objects for this text span, providing diverse perspectives from different domains',
-          items: {
-            type: 'object',
-            properties: {
-              description: {
-                type: 'string',
-                description: 'A short summary of the source (0-4 sentences)'
-              },
-              title: {
-                type: 'string',
-                description: 'The name of the source (book title, essay title, etc)'
-              },
-              author: {
-                type: 'string',
-                description: 'The name of the author (optional)'
-              },
-              domain: {
-                type: 'string',
-                description: 'The domain of the source (history, physics, philosophy, poetry, art, dance, typography, religion, etc)'
-              },
-              search_query: {
-                type: 'string',
-                description: 'A search query that will be used by a search engine to find more information about the source'
-              }
-            },
-            required: ['description', 'title', 'domain', 'search_query']
-          }
-        }
-      },
-      required: ['textSpan', 'records']
-    }
-  }
-}
-
-const GET_NOTE_CONTENT_TOOL = {
-  type: 'function',
-  function: {
-    name: 'getNoteContent',
-    description: 'Get the full current content of the note. Use this when you need to see the complete text to understand context or find exact text spans.',
-    parameters: {
-      type: 'object',
-      properties: {},
-    }
-  }
-}
-
-const EXTEND_LIST_TOOL = {
-  type: 'function',
-  function: {
-    name: 'extendList',
-    description: 'Extend a list in the document by adding more entries. Lists can be identified by repeated use of "and/or" conjunctions or by literal bulletpointed lists with dashes. Provide 1-4 additional entries that extend the list in a meaningful way.',
-    parameters: {
-      type: 'object',
-      properties: {
-        textSpan: {
-          type: 'string',
-          description: 'The exact span of text containing the list to extend. Must be an exact string match to the content (no "...", correcting spelling/punctuation or starting/ending with punctuation/whitespace).'
-        },
-        extensions: {
-          type: 'array',
-          minItems: 1,
-          maxItems: 4,
-          description: 'Array of 1-4 string entries that extend the list',
-          items: {
-            type: 'string'
-          }
-        }
-      },
-      required: ['textSpan', 'extensions']
-    }
-  }
-}
-
 interface NoteProps {
   note: NoteType
+  annotations: TextSpanAnnotation[] // Annotations for this note (from App's annotations map)
   onUpdateTitle: (noteId: string, title: string) => void
   onUpdateContent: (noteId: string, content: string) => void
-  onUpdateAnnotations?: (noteId: string, annotations: TextSpanAnnotation[]) => void
+  onUpdateAnnotations: (noteId: string, annotations: TextSpanAnnotation[]) => void
 }
 
 interface NoteState {
-  annotations: Map<string, TextSpanAnnotation> // Map annotationId -> annotation entry
   openAnnotationId: string | null
   popupPosition: { top: number; left: number } | null
   content: string
@@ -220,7 +130,6 @@ class Note extends Component<NoteProps, NoteState> {
   constructor(props: NoteProps) {
     super(props)
     this.state = {
-      annotations: new Map(),
       openAnnotationId: null,
       popupPosition: null,
       content: props.note.content || '',
@@ -230,53 +139,18 @@ class Note extends Component<NoteProps, NoteState> {
     // Initialize checkpoint manager
     this.checkpointManager = new CheckpointManager(props.note.id)
 
-    // Define tools with their implementations
-    const tools: Tool[] = [
-      {
-        ...ANNOTATE_TOOL,
-        execute: this.onAnnotate.bind(this)
-      },
-      {
-        ...GET_NOTE_CONTENT_TOOL,
-        execute: this.getNoteContent.bind(this)
-      },
-      {
-        ...EXTEND_LIST_TOOL,
-        execute: this.onExtendList.bind(this)
-      }
-    ]
-
-    // Initialize analyzer for this note with tools
-    this.analyzer = new Analyzer(props.note.id, tools)
+    // Initialize analyzer for this note
+    this.analyzer = new Analyzer(props.note.id)
 
     // Create debounced version of contentLogger
     this.debouncedContentLogger = debounce(this.contentLogger.bind(this), 2000)
   }
 
-  // Find the range of a mark in the document by annotationId
-  private annotationIdToRange(annotationId: string): { from: number; to: number } | null {
-    if (!this.editor) return null
-
-    const { state } = this.editor
-    let markRange: { from: number; to: number } | null = null
-
-    // Traverse the document to find the mark with this annotationId
-    state.doc.descendants((node, pos) => {
-      if (markRange) return false // Already found, stop traversing
-
-      const marks = node.marks.filter(mark =>
-        mark.type.name === 'annotation' &&
-        mark.attrs.annotationId === annotationId
-      )
-
-      if (marks.length > 0) {
-        // Found the mark, get its range
-        markRange = { from: pos, to: pos + node.nodeSize }
-        return false // Stop traversing
-      }
-    })
-
-    return markRange
+  // Get annotations as a Map for convenient lookup (derived from props)
+  private getAnnotationsMap(): Map<string, TextSpanAnnotation> {
+    const map = new Map<string, TextSpanAnnotation>()
+    this.props.annotations.forEach(ann => map.set(ann.annotationId, ann))
+    return map
   }
 
   // Normalize quotes and dashes for consistent matching (all 1:1 character replacements)
@@ -309,158 +183,66 @@ class Note extends Component<NoteProps, NoteState> {
     return { from, to }
   }
 
-  // Tool method for Kimi to call when it wants to annotate text spans
-  private onAnnotate = (annotation: any): void => {
-    if (!annotation || !annotation.textSpan || !this.editor) {
-      console.warn('Invalid annotation parameters:', annotation)
-      throw new Error('Invalid annotation parameters')
-    }
-
-    // Clean the textSpan
-    const textSpan = annotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
-
-    // Skip if textSpan is empty after cleaning (e.g., if it was just punctuation)
-    if (!textSpan) {
-      console.warn('TextSpan is empty after cleaning, skipping annotation:', annotation.textSpan)
-      throw new Error('TextSpan is empty after cleaning')
-    }
-
-    // Find textSpan in editor
-    const range = this.findTextSpan(textSpan)
-    if (!range) {
-      console.warn('Could not find textSpan in editor:', textSpan)
-      throw new Error('TextSpan not found in content.')
-    }
-
-    // Generate unique ID for this annotation
-    const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-    // Store annotation data + text span
-    const newAnnotation: ReferenceAnnotation = {
-      type: 'reference',
-      records: annotation.records
-    }
-
-    const annotationEntry: TextSpanAnnotation = {
-      annotationId,
-      textSpan,
-      annotation: newAnnotation,
-      checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
-    }
-
-    // Add to annotations map using functional setState to avoid batching issues
-    this.setState(prevState => {
-      const newAnnotations = new Map(prevState.annotations)
-      newAnnotations.set(annotationId, annotationEntry)
-      return { annotations: newAnnotations }
-    }, () => {
-      this.saveAnnotation(annotationId)
-    })
-  }
-
-  // Tool method for Kimi to get the current note content
-  private getNoteContent = (): string => {
-    if (this.editor) {
-      return this.editor.getText()
-    }
-    return ''
-  }
-
-  // Tool method for Kimi to call when it wants to extend a list
-  private onExtendList = (listAnnotation: any): void => {
-    if (!listAnnotation || !listAnnotation.extensions || listAnnotation.extensions.length === 0 || !listAnnotation.textSpan || !this.editor) {
-      console.warn('Invalid list extension parameters:', listAnnotation)
-      throw new Error('Invalid list extension parameters')
-    }
-
-    // Clean the textSpan
-    const textSpan = listAnnotation.textSpan.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
-
-    // Find textSpan in editor
-    const range = this.findTextSpan(textSpan)
-    if (!range) {
-      console.warn('Could not find textSpan in editor:', textSpan)
-      throw new Error('TextSpan not found in content.')
-    }
-
-    // Generate unique ID for this annotation
-    const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-    // Store annotation data + text span
-    const newAnnotation: ListAnnotation = {
-      type: 'list',
-      extensions: listAnnotation.extensions
-    }
-
-    const annotationEntry: TextSpanAnnotation = {
-      annotationId,
-      textSpan,
-      annotation: newAnnotation,
-      checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
-    }
-
-    // Add to annotations map using functional setState to avoid batching issues
-    this.setState(prevState => {
-      const newAnnotations = new Map(prevState.annotations)
-      newAnnotations.set(annotationId, annotationEntry)
-      return { annotations: newAnnotations }
-    }, () => {
-      this.saveAnnotation(annotationId)
-    })
-  }
-
-  // Load annotations from stored note data and reapply marks
-  private loadAnnotations() {
-    if (!this.editor) {
+  // Convert analyzer results to TextSpanAnnotation entries and add them
+  // noteId parameter allows adding annotations to any note (not just current)
+  private addAnnotationsFromResults(noteId: string, results: AnnotationResult[]): void {
+    if (results.length === 0) {
       return
     }
 
-    if (!this.props.note.annotations || this.props.note.annotations.length === 0) {
-      this.setState({ annotations: new Map() })
-      return
-    }
+    // Get current annotations for the target note
+    // If this is the current note, use props; otherwise we'd need App to provide a way
+    // For now, if noteId matches current note, we can validate textSpans
+    const isCurrentNote = noteId === this.props.note.id
+    const currentAnnotations = isCurrentNote ? this.props.annotations : []
 
-    this.applyAnnotations(this.props.note.annotations)
-  }
+    const newAnnotations: TextSpanAnnotation[] = []
 
-  // Apply annotations from an array (used by loadAnnotations and restoreToCheckpoint)
-  private applyAnnotations(annotations: TextSpanAnnotation[]) {
-    if (!this.editor) {
-      return
-    }
-
-    const annotationsMap = new Map<string, TextSpanAnnotation>()
-
-    annotations.forEach((storedAnnotation) => {
-      const { annotationId, textSpan, annotation } = storedAnnotation
-
-      const range = this.findTextSpan(textSpan)
-      if (!range) {
-        console.warn('Could not find textSpan when loading annotation:', textSpan)
-        return
+    for (const result of results) {
+      // Only validate textSpan if this is the current note (we have the editor)
+      if (isCurrentNote) {
+        const range = this.findTextSpan(result.textSpan)
+        if (!range) {
+          console.warn('Could not find textSpan in editor:', result.textSpan)
+          continue
+        }
       }
 
-      this.editor!.chain()
-        .setTextSelection({ from: range.from, to: range.to })
-        .setMark('annotation', {
-          annotationId,
-          type: annotation.type
-        })
-        .setTextSelection(range.to)
-        .run()
+      // Generate unique ID for this annotation
+      const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 
-      // Use the original stored textSpan, not the extracted one (which loses newlines)
-      annotationsMap.set(annotationId, {
+      let annotation: ReferenceAnnotation | ListAnnotation
+
+      if (result.type === 'reference' && result.records) {
+        annotation = {
+          type: 'reference',
+          records: result.records
+        }
+      } else if (result.type === 'list' && result.extensions) {
+        annotation = {
+          type: 'list',
+          extensions: result.extensions
+        }
+      } else {
+        console.warn('Invalid annotation result:', result)
+        continue
+      }
+
+      newAnnotations.push({
         annotationId,
-        textSpan: textSpan, // Keep original textSpan from storage
-        annotation
+        noteId, // Use the noteId from the analysis result
+        textSpan: result.textSpan,
+        annotation,
+        checkpointId: this.checkpointManager.getCurrentCheckpointId() || undefined
       })
-    })
+    }
 
-    this.setState({ annotations: annotationsMap })
+    if (newAnnotations.length > 0) {
+      this.props.onUpdateAnnotations(noteId, [...currentAnnotations, ...newAnnotations])
+    }
   }
 
-  // Sync marks with current annotations state (reactive - marks automatically match state)
+  // Sync editor marks with annotations from props (single source of truth)
   private syncMarks() {
     if (!this.editor) {
       return
@@ -473,9 +255,8 @@ class Note extends Component<NoteProps, NoteState> {
       .setTextSelection(this.editor.state.doc.content.size)
       .run()
 
-    // Reapply marks for all annotations in state
-    const annotations = Array.from(this.state.annotations.values())
-    annotations.forEach(({ annotationId, textSpan, annotation }) => {
+    // Reapply marks for all annotations from props
+    this.props.annotations.forEach(({ annotationId, textSpan, annotation }) => {
       const range = this.findTextSpan(textSpan)
       if (range) {
         this.editor!.chain()
@@ -496,29 +277,39 @@ class Note extends Component<NoteProps, NoteState> {
   }
 
   componentDidUpdate(prevProps: NoteProps, prevState: NoteState) {
+    // When switching to a different note
     if (prevProps.note.id !== this.props.note.id) {
+      // Don't abort analyzer - let it continue and results will be routed to correct note
+      // But we do need a new analyzer and checkpoint manager for the new note
+      this.analyzer = new Analyzer(this.props.note.id)
+      this.checkpointManager = new CheckpointManager(this.props.note.id)
+
       const initial = this.props.note.content || ''
       this.setContent(initial)
       this.initialContent = initial
       this.setState({
         content: initial,
-        annotations: new Map(),
         openAnnotationId: null,
         popupPosition: null,
         isAnalyzing: false
       })
 
       if (this.editor) {
-        setTimeout(() => this.loadAnnotations(), 0)
+        setTimeout(() => this.syncMarks(), 0)
       }
       return
     }
 
-    // Sync marks only when annotations change (not on content change - that would disrupt typing)
-    if (this.editor && prevState.annotations !== this.state.annotations) {
+    // Sync marks when annotations change in props (single source of truth)
+    if (this.editor && prevProps.annotations !== this.props.annotations) {
       // Use setTimeout to ensure editor has processed any pending changes
       setTimeout(() => this.syncMarks(), 0)
     }
+  }
+
+  componentWillUnmount() {
+    // Don't abort analyzer on unmount - let background analysis complete
+    // Results will still be routed correctly via App's handleUpdateAnnotations
   }
 
   shouldComponentUpdate(nextProps: NoteProps, nextState: NoteState) {
@@ -526,8 +317,7 @@ class Note extends Component<NoteProps, NoteState> {
     // note identity changes or annotation-related state changes.
     if (nextProps.note.id !== this.props.note.id) return true
     if (nextProps.note.title !== this.props.note.title) return true
-    if (nextProps.note.annotations !== this.props.note.annotations) return true
-    if (nextState.annotations !== this.state.annotations) return true
+    if (nextProps.annotations !== this.props.annotations) return true
     if (nextState.openAnnotationId !== this.state.openAnnotationId) return true
     if (nextState.content !== this.state.content) return true
     if (nextState.isAnalyzing !== this.state.isAnalyzing) return true
@@ -580,6 +370,8 @@ class Note extends Component<NoteProps, NoteState> {
   private contentLogger = async () => {
     if (!this.editor) return
 
+    // Capture the analyzer's noteId (it knows which note it's analyzing)
+    const analyzerNoteId = this.analyzer.getNoteID()
 
     const currentContent = this.getContent(false) // Don't normalize for saving
     if (currentContent !== this.initialContent) {
@@ -595,20 +387,30 @@ class Note extends Component<NoteProps, NoteState> {
       this.setState({ isAnalyzing: true })
 
       try {
-        // Analyze the content change - annotations will be added progressively via onAnnotate tool
-        const neededAnalysis = await this.analyzer.analyze(diff, this.props.note.title)
+        // Analyze the content change - pass currentContent for getNoteContent tool
+        const result = await this.analyzer.analyze(diff, currentContent, this.props.note.title)
 
-        // Only create checkpoint if tool calls were executed (i.e., annotations were created)
-        if (neededAnalysis) {
+        // Add annotations from results - routed to the correct note via result.noteId
+        if (result.annotations.length > 0) {
+          this.addAnnotationsFromResults(result.noteId, result.annotations)
+        }
+
+        // Only create checkpoint if tool calls were executed and we're still on the same note
+        if (result.toolCallsExecuted && result.noteId === this.props.note.id) {
           this.createCheckpoint()
         }
 
-        this.initialContent = currentContent
+        // Only update initialContent if we're still on the same note
+        if (analyzerNoteId === this.props.note.id) {
+          this.initialContent = currentContent
+        }
       } catch (error) {
         console.error('Analysis error:', error)
       } finally {
-        // Hide spinner when done
-        this.setState({ isAnalyzing: false })
+        // Hide spinner when done (only if still on the same note)
+        if (analyzerNoteId === this.props.note.id) {
+          this.setState({ isAnalyzing: false })
+        }
       }
     }
   }
@@ -631,48 +433,17 @@ class Note extends Component<NoteProps, NoteState> {
     }
   }
 
-  // Save a single annotation (add or update)
-  private saveAnnotation(annotationId: string) {
-    if (!this.props.onUpdateAnnotations) {
-      return
-    }
-
-    const annotationEntry = this.state.annotations.get(annotationId)
-    if (!annotationEntry) {
-      return
-    }
-
-    // Use the textSpan from the annotation entry (not from editor marks, which may not exist yet)
-    const serializedEntry: TextSpanAnnotation = {
-      annotationId,
-      textSpan: annotationEntry.textSpan,
-      annotation: annotationEntry.annotation
-    }
-
-    // Get current stored annotations and update/add this one
-    const currentAnnotations = this.props.note.annotations || []
-    const existingIndex = currentAnnotations.findIndex(a => a.annotationId === annotationId)
-
-    let updatedAnnotations: TextSpanAnnotation[]
-    if (existingIndex >= 0) {
-      // Update existing annotation
-      updatedAnnotations = [...currentAnnotations]
-      updatedAnnotations[existingIndex] = serializedEntry
-    } else {
-      // Add new annotation
-      updatedAnnotations = [...currentAnnotations, serializedEntry]
-    }
-
+  // Delete a single annotation
+  private deleteAnnotation(annotationId: string) {
+    const updatedAnnotations = this.props.annotations.filter(a => a.annotationId !== annotationId)
     this.props.onUpdateAnnotations(this.props.note.id, updatedAnnotations)
   }
 
-  // Delete a single annotation from storage
-  private deleteAnnotationFromStorage(annotationId: string) {
-    if (!this.props.onUpdateAnnotations) return
-
-    const currentAnnotations = this.props.note.annotations || []
-    const updatedAnnotations = currentAnnotations.filter(a => a.annotationId !== annotationId)
-
+  // Update a single annotation
+  private updateAnnotation(annotationId: string, updatedEntry: TextSpanAnnotation) {
+    const updatedAnnotations = this.props.annotations.map(a =>
+      a.annotationId === annotationId ? updatedEntry : a
+    )
     this.props.onUpdateAnnotations(this.props.note.id, updatedAnnotations)
   }
 
@@ -685,7 +456,7 @@ class Note extends Component<NoteProps, NoteState> {
   private createCheckpoint() {
     const messageIndex = this.analyzer.getMessages().length - 1
     const content = this.getContent(false)
-    const annotationIds = Array.from(this.state.annotations.keys())
+    const annotationIds = this.props.annotations.map(a => a.annotationId)
     this.checkpointManager.createCheckpoint(messageIndex, content, annotationIds)
   }
 
@@ -709,36 +480,23 @@ class Note extends Component<NoteProps, NoteState> {
     this.initialContent = restorationData.content
 
     // Filter annotations to only those in the checkpoint
-    // Use stored annotations from props (which have all annotation data)
     const checkpointAnnotationIds = new Set(restorationData.annotationIds)
-    const filteredAnnotations = (this.props.note.annotations || []).filter(
+    const filteredAnnotations = this.props.annotations.filter(
       ann => checkpointAnnotationIds.has(ann.annotationId)
     )
 
-    // Update saved annotations (only those from the checkpoint)
-    if (this.props.onUpdateAnnotations) {
-      this.props.onUpdateAnnotations(this.props.note.id, filteredAnnotations)
-    }
+    // Update annotations in props (single source of truth)
+    this.props.onUpdateAnnotations(this.props.note.id, filteredAnnotations)
 
-    // Convert filtered annotations array to Map for state
-    const annotationsMap = new Map<string, TextSpanAnnotation>()
-    filteredAnnotations.forEach(ann => {
-      annotationsMap.set(ann.annotationId, ann)
-    })
-
-    // Update state with restored content and annotations BEFORE setContent
-    // This ensures handleContentChange sees the new content and doesn't save old content
+    // Update state with restored content
     this.setState({
-      annotations: annotationsMap,
       content: restorationData.content
     }, () => {
       // After state is updated, set editor content and save to storage
       this.setContent(restorationData.content)
 
       // Save restored content to storage
-      if (this.props.onUpdateContent) {
-        this.props.onUpdateContent(this.props.note.id, restorationData.content)
-      }
+      this.props.onUpdateContent(this.props.note.id, restorationData.content)
     })
   }
 
@@ -768,23 +526,18 @@ class Note extends Component<NoteProps, NoteState> {
   handleDeleteAnnotation = (annotationId: string) => {
     if (!this.editor) return
 
-    // Remove from annotations map using functional setState
-    // syncMarks() will automatically remove the mark when state updates
-    this.setState(prevState => {
-      const newAnnotations = new Map(prevState.annotations)
-      newAnnotations.delete(annotationId)
-      return {
-        annotations: newAnnotations,
-        openAnnotationId: prevState.openAnnotationId === annotationId ? null : prevState.openAnnotationId
-      }
-    }, () => {
-      // Delete annotation from storage
-      this.deleteAnnotationFromStorage(annotationId)
-    })
+    // Close popup if deleting the annotation that's currently open
+    if (this.state.openAnnotationId === annotationId) {
+      this.setState({ openAnnotationId: null, popupPosition: null })
+    }
+
+    // Delete annotation (syncMarks will be called via componentDidUpdate when props change)
+    this.deleteAnnotation(annotationId)
   }
 
   handleDeleteRecord = (annotationId: string, recordIndex: number) => {
-    const entry = this.state.annotations.get(annotationId)
+    const annotationsMap = this.getAnnotationsMap()
+    const entry = annotationsMap.get(annotationId)
     if (entry && entry.annotation.type === 'reference') {
       const refAnnotation = entry.annotation as ReferenceAnnotation
       const newRecords = refAnnotation.records.filter((_, i) => i !== recordIndex)
@@ -792,28 +545,22 @@ class Note extends Component<NoteProps, NoteState> {
         // If no records left, delete the entire annotation
         this.handleDeleteAnnotation(annotationId)
       } else {
-        // Update the annotation with remaining records using functional setState
+        // Update the annotation with remaining records
         const updatedAnnotation: ReferenceAnnotation = {
           ...refAnnotation,
           records: newRecords
         }
-        this.setState(prevState => {
-          const newAnnotations = new Map(prevState.annotations)
-          newAnnotations.set(annotationId, {
-            ...entry,
-            annotation: updatedAnnotation
-          })
-          return { annotations: newAnnotations }
-        }, () => {
-          // Save updated annotation
-          this.saveAnnotation(annotationId)
+        this.updateAnnotation(annotationId, {
+          ...entry,
+          annotation: updatedAnnotation
         })
       }
     }
   }
 
   handleDeleteExtension = (annotationId: string, extensionIndex: number) => {
-    const entry = this.state.annotations.get(annotationId)
+    const annotationsMap = this.getAnnotationsMap()
+    const entry = annotationsMap.get(annotationId)
     if (entry && entry.annotation.type === 'list') {
       const listAnnotation = entry.annotation as ListAnnotation
       const newExtensions = listAnnotation.extensions.filter((_, i) => i !== extensionIndex)
@@ -821,21 +568,14 @@ class Note extends Component<NoteProps, NoteState> {
         // If no extensions left, delete the entire annotation
         this.handleDeleteAnnotation(annotationId)
       } else {
-        // Update the annotation with remaining extensions using functional setState
+        // Update the annotation with remaining extensions
         const updatedAnnotation: ListAnnotation = {
           ...listAnnotation,
           extensions: newExtensions
         }
-        this.setState(prevState => {
-          const newAnnotations = new Map(prevState.annotations)
-          newAnnotations.set(annotationId, {
-            ...entry,
-            annotation: updatedAnnotation
-          })
-          return { annotations: newAnnotations }
-        }, () => {
-          // Save updated annotation
-          this.saveAnnotation(annotationId)
+        this.updateAnnotation(annotationId, {
+          ...entry,
+          annotation: updatedAnnotation
         })
       }
     }
@@ -849,10 +589,11 @@ class Note extends Component<NoteProps, NoteState> {
 
   // Render annotations by reading marks from the document
   renderAnnotationOverlay(): React.ReactNode {
-    if (!this.editor || this.state.annotations.size === 0) {
+    if (!this.editor || this.props.annotations.length === 0) {
       return null
     }
 
+    const annotationsMap = this.getAnnotationsMap()
     const annotationRanges = new Map<string, { from: number; to: number }>()
     const processedIds = new Set<string>()
 
@@ -895,7 +636,7 @@ class Note extends Component<NoteProps, NoteState> {
     const spans: Array<{ from: number; component: React.ReactElement }> = []
 
     annotationRanges.forEach((range, annotationId) => {
-      const annotationEntry = this.state.annotations.get(annotationId)
+      const annotationEntry = annotationsMap.get(annotationId)
       if (!annotationEntry) return
 
       const { annotation } = annotationEntry
@@ -978,13 +719,8 @@ class Note extends Component<NoteProps, NoteState> {
                     initialContent={this.props.note.content || ''}
                     onEditorReady={(editor) => {
                       this.editor = editor
-                      // On editor ready: load annotations from props (storage) if available,
-                      // otherwise sync marks from state (rare case where editor recreated mid-session)
-                      if (this.props.note.annotations && this.props.note.annotations.length > 0) {
-                        // Annotations in props (from storage) - load and apply marks
-                        setTimeout(() => this.loadAnnotations(), 0)
-                      } else if (this.state.annotations.size > 0) {
-                        // Annotations in state but not in props (editor recreated mid-session) - sync marks
+                      // Sync marks from props (single source of truth) on editor ready
+                      if (this.props.annotations.length > 0) {
                         setTimeout(() => this.syncMarks(), 0)
                       }
                     }}

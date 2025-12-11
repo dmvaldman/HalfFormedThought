@@ -2,28 +2,35 @@ import { Component } from 'react'
 import Sidebar from './Sidebar'
 import Note from './Note'
 import { NoteType, TextSpanAnnotation } from './types'
-import { loadNotes, saveNotes, generateId } from './storage'
+import { loadAll, saveNotes, saveAnnotations, generateId } from './storage'
 import { debounce } from './utils'
 
 interface AppState {
   notes: NoteType[]
+  annotations: Map<string, TextSpanAnnotation[]> // noteId -> annotations
   currentNoteId: string | null
 }
 
 class App extends Component<{}, AppState> {
   private debouncedSaveNotes: (notes: NoteType[]) => void
+  private debouncedSaveAnnotations: (annotations: Map<string, TextSpanAnnotation[]>) => void
 
   constructor(props: {}) {
     super(props)
-    const notes = loadNotes()
+    const { notes, annotations } = loadAll()
 
     this.state = {
       notes,
+      annotations,
       currentNoteId: notes.length > 0 ? notes[0].id : null,
     }
 
     this.debouncedSaveNotes = debounce((notes: NoteType[]) => {
       saveNotes(notes)
+    }, 500)
+
+    this.debouncedSaveAnnotations = debounce((annotations: Map<string, TextSpanAnnotation[]>) => {
+      saveAnnotations(annotations)
     }, 500)
   }
 
@@ -58,14 +65,20 @@ class App extends Component<{}, AppState> {
       newCurrentNoteId = updatedNotes.length > 0 ? updatedNotes[0].id : null
     }
 
+    // Clean up annotations for this note
+    const updatedAnnotations = new Map(this.state.annotations)
+    updatedAnnotations.delete(noteId)
+
     // Clean up associated messages and checkpoints from localStorage
     this.cleanupNoteData(noteId)
 
     this.setState({
       notes: updatedNotes,
+      annotations: updatedAnnotations,
       currentNoteId: newCurrentNoteId,
     })
     saveNotes(updatedNotes)
+    saveAnnotations(updatedAnnotations)
   }
 
   // Clean up messages and checkpoints for a deleted note
@@ -119,18 +132,16 @@ class App extends Component<{}, AppState> {
   }
 
   handleUpdateAnnotations = (noteId: string, annotations: TextSpanAnnotation[]) => {
-    const updatedNotes = this.state.notes.map((note) =>
-      note.id === noteId
-        ? { ...note, annotations, updatedAt: Date.now() }
-        : note
-    )
-    this.setState({ notes: updatedNotes })
-    this.debouncedSaveNotes(updatedNotes)
+    const updatedAnnotations = new Map(this.state.annotations)
+    updatedAnnotations.set(noteId, annotations)
+    this.setState({ annotations: updatedAnnotations })
+    this.debouncedSaveAnnotations(updatedAnnotations)
   }
 
   render() {
-    const { notes, currentNoteId } = this.state
+    const { notes, annotations, currentNoteId } = this.state
     const currentNote = notes.find((note) => note.id === currentNoteId) || null
+    const currentAnnotations = currentNote ? (annotations.get(currentNote.id) || []) : []
 
     let emptyText = ''
     if (!currentNote && notes.length === 0) {
@@ -153,6 +164,7 @@ class App extends Component<{}, AppState> {
           <Note
             key={currentNote.id}
             note={currentNote}
+            annotations={currentAnnotations}
             onUpdateTitle={this.handleUpdateTitle}
             onUpdateContent={this.handleUpdateContent}
             onUpdateAnnotations={this.handleUpdateAnnotations}

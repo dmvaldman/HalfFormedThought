@@ -28,61 +28,20 @@ export interface LLMOptions {
   response_format?: any
   reasoning_effort?: 'medium' | 'high' | 'low'
   tools?: any[]
+  signal?: AbortSignal // For request cancellation
   [key: string]: any // Allow additional LLM-specific options
 }
 
 // Configuration: choose API provider ('together', 'kimi', or 'openrouter')
 // NOTE: 'kimi' requires a backend proxy due to CORS restrictions - direct browser access is blocked
 // Use 'together' or 'openrouter' for direct browser access without a proxy
-const API_PROVIDER: 'together' | 'kimi' | 'openrouter' = 'together'
+const API_PROVIDER = (import.meta.env.VITE_API_PROVIDER as 'together' | 'kimi' | 'openrouter') || 'together'
 
 // Model names differ between providers
 const MODEL_NAMES = {
   together: 'moonshotai/Kimi-K2-Instruct-0905',
   kimi: 'kimi-k2-0905-preview',
   openrouter: 'moonshotai/kimi-k2-0905'
-}
-
-async function parseResponse(fullResponse: string) {
-  // Parse the response
-  let cleanedResponse = fullResponse.trim()
-
-  const jsonMatch = cleanedResponse.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/)
-  if (jsonMatch) {
-    cleanedResponse = jsonMatch[1].trim()
-  }
-
-  try {
-    const parsed = JSON.parse(cleanedResponse)
-    return parsed
-  } catch (parseError: any) {
-    console.error('\nFailed to parse JSON response:')
-    console.error('Parse error:', parseError.message)
-
-    // Try to show context around the error
-    const errorPosMatch = parseError.message.match(/position (\d+)/)
-    if (errorPosMatch) {
-      const errorPos = parseInt(errorPosMatch[1])
-      const start = Math.max(0, errorPos - 100)
-      const end = Math.min(cleanedResponse.length, errorPos + 100)
-      console.error(`Context around error position ${errorPos}:`)
-      console.error(cleanedResponse.substring(start, end))
-    }
-
-    // Try jsonrepair if available
-    try {
-      const { jsonrepair } = await import('jsonrepair')
-      const repaired = jsonrepair(cleanedResponse)
-      const parsed = JSON.parse(repaired)
-      console.log('Successfully repaired JSON with jsonrepair')
-      return parsed
-    } catch (repairError) {
-      console.error('\nFailed to parse or repair JSON response:')
-      console.error('Full response:')
-      console.log(cleanedResponse)
-      throw parseError
-    }
-  }
 }
 
 interface LLMResponse {
@@ -113,6 +72,7 @@ class TogetherLLMService extends LLMService {
       response_format,
       reasoning_effort = "high",
       tools,
+      signal,
       ...restOptions
     } = options
 
@@ -125,7 +85,7 @@ class TogetherLLMService extends LLMService {
       ...(tools && { tools }),
       stream: false,
       ...restOptions
-    })
+    }, { signal })
 
     const choice = response.choices[0]
     const message = choice?.message
@@ -168,6 +128,7 @@ class KimiLLMService extends LLMService {
       response_format,
       reasoning_effort, // Not supported by Kimi, ignore
       tools,
+      signal,
       ...restOptions
     } = options
 
@@ -179,7 +140,7 @@ class KimiLLMService extends LLMService {
       ...(tools && { tools }),
       stream: false,
       ...restOptions
-    })
+    }, { signal })
 
     const choice = response.choices[0]
     const message = choice?.message
@@ -223,6 +184,7 @@ class OpenRouterLLMService extends LLMService {
       temperature = 0.6,
       response_format = { type: 'json_object' },
       tools,
+      signal,
       ...restOptions
     } = options
 
@@ -234,7 +196,7 @@ class OpenRouterLLMService extends LLMService {
       ...(tools && { tools }),
       stream: false,
       ...restOptions
-    } as any)
+    } as any, { signal })
 
     const choice = response.choices[0]
     const message = choice?.message
