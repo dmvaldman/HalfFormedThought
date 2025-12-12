@@ -772,7 +772,6 @@ class Note extends Component<NoteProps, NoteState> {
                   annotation={ann}
                   editor={this.editor!}
                   annotationLayerRef={this.annotationLayerRef}
-                  findTextSpan={this.findTextSpan.bind(this)}
                   isPopupOpen={this.state.openAnnotationId === ann.annotationId}
                   popupPosition={this.state.openAnnotationId === ann.annotationId ? this.state.popupPosition : null}
                   onPopupOpen={this.handleConnectionPopupOpen}

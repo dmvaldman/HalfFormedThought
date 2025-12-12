@@ -1,6 +1,6 @@
 import React, { Component } from 'react'
 import { Editor as TiptapEditor } from '@tiptap/react'
-import { TextSpanAnnotation, ConnectionAnnotation as ConnectionAnnotationType, getTextSpans } from './types'
+import { TextSpanAnnotation, ConnectionAnnotation as ConnectionAnnotationType } from './types'
 import { AnnotationPopup } from './AnnotationPopup'
 import ReferenceAnnotationContent from './ReferenceAnnotation'
 
@@ -8,7 +8,6 @@ interface ConnectionAnnotationProps {
   annotation: TextSpanAnnotation
   editor: TiptapEditor
   annotationLayerRef: React.RefObject<HTMLDivElement>
-  findTextSpan: (textSpan: string) => { from: number; to: number } | null
   isPopupOpen: boolean
   popupPosition: { top: number; left: number } | null
   onPopupOpen: (annotationId: string, position: { top: number; left: number }) => void
@@ -19,6 +18,7 @@ interface ConnectionAnnotationProps {
 interface ConnectionAnnotationState {
   isHovered: boolean
   resizeKey: number
+  isReady: boolean // True once marks are laid out in DOM
 }
 
 // Delay before unhover (allows time to move between span and line)
@@ -30,7 +30,8 @@ const GUTTER_MARGIN = 20
 class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps, ConnectionAnnotationState> {
   state: ConnectionAnnotationState = {
     isHovered: false,
-    resizeKey: 0
+    resizeKey: 0,
+    isReady: false
   }
 
   private unhoverTimeout: ReturnType<typeof setTimeout> | null = null
@@ -64,7 +65,6 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
 
     if (foundId !== myId) return // Not our annotation
 
-    console.log('[ConnectionAnnotation] mouseenter MY span', { foundId })
     this.cancelUnhover()
     this.setHovered(true)
   }
@@ -79,7 +79,6 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
 
     if (foundId !== myId) return // Not our annotation
 
-    console.log('[ConnectionAnnotation] mouseleave MY span', { foundId })
     // Schedule unhover with delay - if we enter another element of this connection, it will cancel
     this.scheduleUnhover()
   }
@@ -95,14 +94,12 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
 
     if (foundId !== myId) return // Not our annotation
 
-    console.log('[ConnectionAnnotation] click MY span', { foundId })
     const { editor, annotation, onPopupOpen } = this.props
     const editorRect = editor.view.dom.getBoundingClientRect()
     const position = {
       top: mouseEvent.clientY - editorRect.top + 8,
       left: mouseEvent.clientX - editorRect.left
     }
-    console.log('[ConnectionAnnotation] calling onPopupOpen', { annotationId: annotation.annotationId, position })
     onPopupOpen(annotation.annotationId, position)
   }
 
@@ -118,6 +115,11 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
 
     // Add resize listener
     window.addEventListener('resize', this.resizeHandler)
+
+    // Wait for DOM layout before rendering SVG lines (avoids flicker)
+    requestAnimationFrame(() => {
+      this.setState({ isReady: true })
+    })
   }
 
   componentWillUnmount() {
@@ -135,11 +137,6 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
   }
 
   private setHovered(isHovered: boolean) {
-    console.log('[ConnectionAnnotation] setHovered', {
-      isHovered,
-      annotationId: this.props.annotation.annotationId
-    })
-
     this.setState({ isHovered })
   }
 
@@ -161,21 +158,17 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
   }
 
   private handleLineMouseEnter = () => {
-    console.log('[ConnectionAnnotation] line mouseenter, current isHovered:', this.state.isHovered)
     this.cancelUnhover()
     if (!this.state.isHovered) {
       this.setHovered(true)
     }
   }
 
-  private handleLineMouseLeave = (event: React.MouseEvent) => {
-    const relatedTarget = event.relatedTarget as HTMLElement | null
-    console.log('[ConnectionAnnotation] line mouseleave, relatedTarget:', relatedTarget?.tagName, relatedTarget?.className)
+  private handleLineMouseLeave = () => {
     this.scheduleUnhover()
   }
 
   private handleLineClick = (event: React.MouseEvent) => {
-    console.log('[ConnectionAnnotation] line click')
     const { editor, annotation, onPopupOpen } = this.props
 
     const editorRect = editor.view.dom.getBoundingClientRect()
@@ -184,30 +177,33 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
       left: event.clientX - editorRect.left
     }
 
-    console.log('[ConnectionAnnotation] line click calling onPopupOpen', { annotationId: annotation.annotationId, position })
     onPopupOpen(annotation.annotationId, position)
   }
 
-  // Get the bounding rect for a text span, relative to the annotation layer
-  private getSpanRect(textSpan: string): { left: number; right: number; top: number; bottom: number } | null {
-    const { editor, findTextSpan, annotationLayerRef } = this.props
-    if (!annotationLayerRef.current) return null
+  // Get bounding rects for all mark elements with this annotation ID, relative to the annotation layer
+  // Returns an array of rects (one per span element in the DOM)
+  private getMarkRects(): Array<{ left: number; right: number; top: number; bottom: number }> {
+    const { editor, annotation, annotationLayerRef } = this.props
+    if (!annotationLayerRef.current) return []
 
-    const range = findTextSpan(textSpan)
-    if (!range) return null
-
-    const view = editor.view
     const layerRect = annotationLayerRef.current.getBoundingClientRect()
+    const markElements = editor.view.dom.querySelectorAll(
+      `span[data-annotation-id="${annotation.annotationId}"]`
+    )
 
-    const startCoords = view.coordsAtPos(range.from)
-    const endCoords = view.coordsAtPos(range.to)
+    const rects: Array<{ left: number; right: number; top: number; bottom: number }> = []
 
-    return {
-      left: startCoords.left - layerRect.left,
-      right: endCoords.right - layerRect.left,
-      top: startCoords.top - layerRect.top,
-      bottom: endCoords.bottom - layerRect.top
-    }
+    markElements.forEach(el => {
+      const rect = el.getBoundingClientRect()
+      rects.push({
+        left: rect.left - layerRect.left,
+        right: rect.right - layerRect.left,
+        top: rect.top - layerRect.top,
+        bottom: rect.bottom - layerRect.top
+      })
+    })
+
+    return rects
   }
 
   // Get the left edge of the text content area, relative to annotation layer
@@ -223,16 +219,18 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
   }
 
   private renderLine(): React.ReactNode {
-    const { annotation } = this.props
-    const { isHovered } = this.state
+    const { isHovered, isReady } = this.state
 
-    const spans = getTextSpans(annotation.textSpan)
-    if (spans.length < 2) return null
+    // Don't render until DOM is ready (avoids flicker)
+    if (!isReady) return null
 
-    const rect1 = this.getSpanRect(spans[0])
-    const rect2 = this.getSpanRect(spans[1])
+    // Get rects directly from DOM mark elements (survives text edits)
+    const rects = this.getMarkRects()
+    if (rects.length < 2) return null
 
-    if (!rect1 || !rect2) return null
+    // Use the first two mark elements found
+    const rect1 = rects[0]
+    const rect2 = rects[1]
 
     // Determine which span is "first" (top-most, or left-most if same line)
     let span1 = rect1
