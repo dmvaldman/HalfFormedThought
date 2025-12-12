@@ -121,21 +121,19 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     this.setState({ isHovered })
   }
 
-  // Render a dynamic style tag to highlight spans - survives TipTap re-renders
-  // Uses same color as SVG line hover state
-  private renderHoverStyle(): React.ReactNode {
-    const { annotation } = this.props
-    const { isHovered } = this.state
-
-    if (!isHovered) return null
-
-    const css = `
-      span[data-annotation-id="${annotation.annotationId}"] {
-        background-color: var(--connection-color-hover) !important;
-      }
-    `
-
-    return <style dangerouslySetInnerHTML={{ __html: css }} />
+  // Add/remove hover class on spans when line is hovered
+  componentDidUpdate(_prevProps: ConnectionAnnotationProps, prevState: ConnectionAnnotationState) {
+    if (prevState.isHovered !== this.state.isHovered) {
+      const { annotation } = this.props
+      const spans = document.querySelectorAll(`span[data-annotation-id="${annotation.annotationId}"]`)
+      spans.forEach(span => {
+        if (this.state.isHovered) {
+          span.classList.add('connection-hovered')
+        } else {
+          span.classList.remove('connection-hovered')
+        }
+      })
+    }
   }
 
   private handleLineMouseEnter = () => {
@@ -320,7 +318,6 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
   render() {
     return (
       <>
-        {this.renderHoverStyle()}
         {this.renderLine()}
         {this.renderPopup()}
       </>

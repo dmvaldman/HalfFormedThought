@@ -374,32 +374,56 @@ button {
   pointer-events: auto;
 }
 
-/* Annotation marks are styled inline by TipTap, but we can add hover effects */
-.editor-content span[data-annotation-id] {
+/* Annotation mark base styles */
+.annotation-mark {
   cursor: pointer;
-  transition: background-color var(--hover-transition-out);
+  transition: background-color var(--hover-transition-out), border-color var(--hover-transition-out);
   border-radius: 2px;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  padding-left: 1px;
+  padding-right: 1px;
+}
+
+/* Base colors for each annotation type */
+.annotation-mark-reference {
+  background-color: var(--reference-color);
+  border: 1px solid var(--reference-color);
+}
+
+.annotation-mark-list {
+  background-color: var(--list-color);
+  border: 1px solid var(--list-color);
+}
+
+.annotation-mark-connection {
+  background-color: var(--connection-color);
+  border: 1px solid var(--connection-color);
 }
 
 /* Hover states for each annotation type */
-.editor-content span[data-annotation-type="reference"]:hover {
-  background-color: var(--reference-color-hover) !important;
-  transition: background-color var(--hover-transition-in);
+.annotation-mark-reference:hover {
+  background-color: var(--reference-color-hover);
+  border-color: var(--reference-color-hover);
+  transition: background-color var(--hover-transition-in), border-color var(--hover-transition-in);
 }
 
-.editor-content span[data-annotation-type="list"]:hover {
-  background-color: var(--list-color-hover) !important;
-  transition: background-color var(--hover-transition-in);
+.annotation-mark-list:hover {
+  background-color: var(--list-color-hover);
+  border-color: var(--list-color-hover);
+  transition: background-color var(--hover-transition-in), border-color var(--hover-transition-in);
 }
 
-.editor-content span[data-annotation-type="connection"]:hover {
-  background-color: var(--connection-color-hover) !important;
-  transition: background-color var(--hover-transition-in);
+.annotation-mark-connection:hover {
+  background-color: var(--connection-color-hover);
+  border-color: var(--connection-color-hover);
+  transition: background-color var(--hover-transition-in), border-color var(--hover-transition-in);
 }
 
 /* Connection highlight sync - when a connection line is hovered, brighten its spans */
-.editor-content span[data-annotation-id].connection-hovered {
-  background-color: var(--connection-color-hover) !important;
+.annotation-mark-connection.connection-hovered {
+  background-color: var(--connection-color-hover);
+  border-color: var(--connection-color-hover);
 }
 
 /* Connection lines SVG */

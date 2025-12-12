@@ -13,7 +13,7 @@ const baseAttributes = {
 }
 
 // Helper to create annotation mark with specific type
-function createAnnotationMark(name: string, backgroundColor: string) {
+function createAnnotationMark(name: string) {
   return Mark.create({
     name,
 
@@ -33,7 +33,7 @@ function createAnnotationMark(name: string, backgroundColor: string) {
         'span',
         mergeAttributes(HTMLAttributes, {
           'data-annotation-type': name,
-          style: `background-color: ${backgroundColor}`,
+          class: `annotation-mark annotation-mark-${name}`,
         }),
         0,
       ]
@@ -42,20 +42,9 @@ function createAnnotationMark(name: string, backgroundColor: string) {
 }
 
 // Individual mark types - can overlap because they're different mark types
-export const ReferenceAnnotationMark = createAnnotationMark(
-  'reference',
-  'var(--reference-color)'
-)
-
-export const ListAnnotationMark = createAnnotationMark(
-  'list',
-  'var(--list-color)'
-)
-
-export const ConnectionAnnotationMark = createAnnotationMark(
-  'connection',
-  'var(--connection-color)'
-)
+export const ReferenceAnnotationMark = createAnnotationMark('reference')
+export const ListAnnotationMark = createAnnotationMark('list')
+export const ConnectionAnnotationMark = createAnnotationMark('connection')
 
 // Export all marks as an array for easy registration
 export const AnnotationMarks = [
