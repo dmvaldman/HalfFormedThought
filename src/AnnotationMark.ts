@@ -1,70 +1,65 @@
-import { Mark } from '@tiptap/core'
+import { Mark, mergeAttributes } from '@tiptap/core'
 
-export interface AnnotationMarkAttributes {
-  annotationId: string
-  type: 'reference' | 'list' | 'connection'
+// Base attributes shared by all annotation marks
+const baseAttributes = {
+  annotationId: {
+    default: null as string | null,
+    parseHTML: (element: HTMLElement) => element.getAttribute('data-annotation-id'),
+    renderHTML: (attributes: { annotationId: string | null }) => {
+      if (!attributes.annotationId) return {}
+      return { 'data-annotation-id': attributes.annotationId }
+    },
+  },
 }
 
-export const AnnotationMark = Mark.create({
-  name: 'annotation',
+// Helper to create annotation mark with specific type
+function createAnnotationMark(name: string, backgroundColor: string) {
+  return Mark.create({
+    name,
 
-  addAttributes() {
-    return {
-      annotationId: {
-        default: null,
-        parseHTML: element => element.getAttribute('data-annotation-id'),
-        renderHTML: attributes => {
-          if (!attributes.annotationId) {
-            return {}
-          }
-          return {
-            'data-annotation-id': attributes.annotationId,
-          }
-        },
-      },
-      type: {
-        default: null,
-        parseHTML: element => element.getAttribute('data-annotation-type') as 'reference' | 'list' | 'connection' | null,
-        renderHTML: attributes => {
-          if (!attributes.type) {
-            return {}
-          }
-          return {
-            'data-annotation-type': attributes.type,
-          }
-        },
-      },
-    }
-  },
+    // Allow this mark to coexist with other annotation marks
+    excludes: '',
 
-  parseHTML() {
-    return [
-      {
-        tag: 'span[data-annotation-id]',
-      },
-    ]
-  },
+    addAttributes() {
+      return { ...baseAttributes }
+    },
 
-  renderHTML({ HTMLAttributes, mark }) {
-    const type = mark.attrs.type
-    const style: Record<string, string> = {}
+    parseHTML() {
+      return [{ tag: `span[data-annotation-type="${name}"]` }]
+    },
 
-    // Add background color based on annotation type
-    // Base opacity is lower, will brighten on hover via CSS
-    if (type === 'reference') {
-      style.backgroundColor = 'rgba(100, 100, 100, 0.25)'
-    } else if (type === 'list') {
-      style.backgroundColor = 'rgba(255, 68, 68, 0.25)'
-    } else if (type === 'connection') {
-      style.backgroundColor = 'rgba(97, 218, 251, 0.25)' // Blue (accent-cyan)
-    }
+    renderHTML({ HTMLAttributes }) {
+      return [
+        'span',
+        mergeAttributes(HTMLAttributes, {
+          'data-annotation-type': name,
+          style: `background-color: ${backgroundColor}`,
+        }),
+        0,
+      ]
+    },
+  })
+}
 
-    // Convert style object to string
-    const styleString = Object.entries(style)
-      .map(([key, value]) => `${key.replace(/([A-Z])/g, '-$1').toLowerCase()}: ${value}`)
-      .join('; ')
+// Individual mark types - can overlap because they're different mark types
+export const ReferenceAnnotationMark = createAnnotationMark(
+  'reference',
+  'rgba(100, 100, 100, 0.25)'
+)
 
-    return ['span', { ...HTMLAttributes, style: styleString }, 0]
-  },
-})
+export const ListAnnotationMark = createAnnotationMark(
+  'list',
+  'rgba(255, 68, 68, 0.25)'
+)
 
+export const ConnectionAnnotationMark = createAnnotationMark(
+  'connection',
+  'rgba(97, 218, 251, 0.25)'
+)
+
+// Export all marks as an array for easy registration
+export const AnnotationMarks = [
+  ReferenceAnnotationMark,
+  ListAnnotationMark,
+  ConnectionAnnotationMark,
+]

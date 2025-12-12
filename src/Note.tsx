@@ -1,7 +1,7 @@
 import React, { Component } from 'react'
 import { EditorContent, useEditor, Editor as TiptapEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
-import { AnnotationMark } from './AnnotationMark'
+import { AnnotationMarks } from './AnnotationMark'
 import { NoteType, ReferenceAnnotation, ListAnnotation, TextSpanAnnotation, Checkpoint, getTextSpans } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
@@ -29,7 +29,7 @@ const TipTapEditorWrapper: React.FC<TipTapEditorWrapperProps> = ({ initialConten
   const editorRef = React.useRef<TiptapEditor | null>(null)
 
   const editor = useEditor({
-    extensions: [StarterKit, AnnotationMark],
+    extensions: [StarterKit, ...AnnotationMarks],
     content: convertNewlinesToBreaks(initialContent),
     enablePasteRules: false, // Disable default paste rules to let our custom handlePaste handle everything
     onUpdate: () => {
@@ -266,27 +266,29 @@ class Note extends Component<NoteProps, NoteState> {
       return
     }
 
-    // Clear all marks first
-    this.editor.chain()
-      .setTextSelection({ from: 0, to: this.editor.state.doc.content.size })
-      .unsetMark('annotation')
-      .setTextSelection(this.editor.state.doc.content.size)
-      .run()
+    // Clear all annotation marks first (each type separately)
+    const markTypes = ['reference', 'list', 'connection']
+    markTypes.forEach(markType => {
+      this.editor!.chain()
+        .setTextSelection({ from: 0, to: this.editor!.state.doc.content.size })
+        .unsetMark(markType)
+        .setTextSelection(this.editor!.state.doc.content.size)
+        .run()
+    })
 
     // Reapply marks for all annotations from props
+    // Use the annotation type as the mark name (reference, list, or connection)
     this.props.annotations.forEach(({ annotationId, textSpan, annotation }) => {
       // Handle both single and multiple text spans
       const spans = getTextSpans(textSpan)
+      const markName = annotation.type // 'reference', 'list', or 'connection'
 
       for (const span of spans) {
         const range = this.findTextSpan(span)
         if (range) {
           this.editor!.chain()
             .setTextSelection({ from: range.from, to: range.to })
-            .setMark('annotation', {
-              annotationId,
-              type: annotation.type
-            })
+            .setMark(markName, { annotationId })
             .setTextSelection(range.to)
             .run()
         }
@@ -645,11 +647,14 @@ class Note extends Component<NoteProps, NoteState> {
     const annotationRanges = new Map<string, { from: number; to: number }>()
     const processedIds = new Set<string>()
 
+    // Mark type names for annotations
+    const annotationMarkTypes = ['reference', 'list', 'connection']
+
     // First pass: collect all text nodes with marks and build ranges
     this.editor.state.doc.descendants((node, pos) => {
       if (node.isText && node.marks) {
         node.marks.forEach(mark => {
-          if (mark.type.name === 'annotation' && mark.attrs.annotationId) {
+          if (annotationMarkTypes.includes(mark.type.name) && mark.attrs.annotationId) {
             const annotationId = mark.attrs.annotationId
             if (processedIds.has(annotationId)) return
 
@@ -662,7 +667,7 @@ class Note extends Component<NoteProps, NoteState> {
             this.editor!.state.doc.nodesBetween(currentPos, this.editor!.state.doc.content.size, (nextNode, nextPos) => {
               if (nextNode.isText && nextNode.marks) {
                 const hasSameMark = nextNode.marks.some(m =>
-                  m.type.name === 'annotation' && m.attrs.annotationId === annotationId
+                  annotationMarkTypes.includes(m.type.name) && m.attrs.annotationId === annotationId
                 )
                 if (hasSameMark) {
                   to = nextPos + nextNode.nodeSize
