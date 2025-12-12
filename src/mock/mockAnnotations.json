@@ -84,5 +84,15 @@
         "search_query": "Saussure synchronic diachronic linguistics temporal analysis"
       }
     ]
+  },
+  {
+    "type": "list",
+    "textSpan": "documentation over institutional memory, artifacts over processes, snapshots over streams",
+    "extensions": [
+      "schemas over tribal knowledge",
+      "versioned configs over oral tradition",
+      "explicit contracts over implicit conventions",
+      "immutable logs over mutable state"
+    ]
   }
 ]
