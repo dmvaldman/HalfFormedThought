@@ -19,6 +19,8 @@ interface ConnectionLinesProps {
   onClick: (annotationId: string, position: { top: number; left: number }) => void
   // Function to find text span range in editor
   findTextSpan: (textSpan: string) => { from: number; to: number } | null
+  // Reference to the annotation layer (SVG's parent) for coordinate calculations
+  annotationLayerRef: React.RefObject<HTMLDivElement>
 }
 
 interface ConnectionLinesState {
@@ -26,8 +28,8 @@ interface ConnectionLinesState {
   resizeKey: number // Force re-render on window resize
 }
 
-// How far into the left margin the gutter line goes (from left edge of editor content area)
-const GUTTER_OFFSET = -20
+// How far into the left margin the gutter line extends (past the left edge of text)
+const GUTTER_MARGIN = 20
 
 class ConnectionLines extends Component<ConnectionLinesProps, ConnectionLinesState> {
   state: ConnectionLinesState = {
@@ -47,27 +49,27 @@ class ConnectionLines extends Component<ConnectionLinesProps, ConnectionLinesSta
     window.removeEventListener('resize', this.resizeHandler)
   }
 
-  // Get the bounding rect for a text span in document coordinates
+  // Get the bounding rect for a text span, relative to the annotation layer (SVG's parent)
   private getSpanRect(textSpan: string): { left: number; right: number; top: number; bottom: number } | null {
-    const { editor, findTextSpan } = this.props
-    if (!editor) return null
+    const { editor, findTextSpan, annotationLayerRef } = this.props
+    if (!editor || !annotationLayerRef.current) return null
 
     const range = findTextSpan(textSpan)
     if (!range) return null
 
     const view = editor.view
-    const editorRect = view.dom.getBoundingClientRect()
+    const layerRect = annotationLayerRef.current.getBoundingClientRect()
 
-    // Get coordinates at start and end of the range
+    // Get coordinates at start and end of the range (these are screen coordinates)
     const startCoords = view.coordsAtPos(range.from)
     const endCoords = view.coordsAtPos(range.to)
 
-    // Convert to editor-relative coordinates
+    // Convert to annotation-layer-relative coordinates
     return {
-      left: startCoords.left - editorRect.left,
-      right: endCoords.right - editorRect.left,
-      top: startCoords.top - editorRect.top,
-      bottom: endCoords.bottom - editorRect.top
+      left: startCoords.left - layerRect.left,
+      right: endCoords.right - layerRect.left,
+      top: startCoords.top - layerRect.top,
+      bottom: endCoords.bottom - layerRect.top
     }
   }
 
@@ -155,6 +157,21 @@ class ConnectionLines extends Component<ConnectionLinesProps, ConnectionLinesSta
     onClick(annotationId, position)
   }
 
+  // Get the left edge of the text content area, relative to annotation layer
+  private getContentLeftEdge(): number {
+    const { editor, annotationLayerRef } = this.props
+    if (!editor || !annotationLayerRef.current) return 0
+
+    const view = editor.view
+    const layerRect = annotationLayerRef.current.getBoundingClientRect()
+
+    // Position 1 is the first text position in ProseMirror
+    const firstCharCoords = view.coordsAtPos(1)
+
+    // Return the left edge relative to the annotation layer
+    return firstCharCoords.left - layerRect.left
+  }
+
   render() {
     const { editor } = this.props
     const { hoveredConnectionId } = this.state
@@ -163,6 +180,10 @@ class ConnectionLines extends Component<ConnectionLinesProps, ConnectionLinesSta
 
     const geometries = this.getConnectionGeometries()
     if (geometries.length === 0) return null
+
+    // Calculate gutter position based on actual content left edge
+    const contentLeftEdge = this.getContentLeftEdge()
+    const gutterX = contentLeftEdge - GUTTER_MARGIN
 
     return (
       <svg
@@ -191,17 +212,13 @@ class ConnectionLines extends Component<ConnectionLinesProps, ConnectionLinesSta
             pathD = `M ${span1.right} ${y} L ${span2.left} ${y}`
           } else {
             // Different lines: segmented path
-            // From bottom-left of span1 -> left gutter -> top-left of span2
+            // From bottom-left of span1 -> left gutter -> bottom-left of span2
             const x1 = span1.left
             const y1 = span1.bottom
             const x2 = span2.left
-            const y2 = span2.top
+            const y2 = span2.bottom
 
-            // Gutter x position: always in the left margin (negative X relative to editor content)
-            // This ensures the line goes into the margin and never cuts through text
-            const gutterX = -GUTTER_OFFSET
-
-            // Path: from span1 bottom-left -> notch left to gutter -> down -> notch right to span2 top-left
+            // Path: from span1 bottom-left -> notch left to gutter -> down -> notch right to span2 bottom-left
             pathD = `M ${x1} ${y1} L ${gutterX} ${y1} L ${gutterX} ${y2} L ${x2} ${y2}`
           }
 

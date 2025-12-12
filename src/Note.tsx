@@ -761,6 +761,7 @@ class Note extends Component<NoteProps, NoteState> {
               annotations={this.props.annotations}
               onClick={this.handleConnectionClick}
               findTextSpan={this.findTextSpan.bind(this)}
+              annotationLayerRef={this.annotationLayerRef}
             />
           </div>
                   <TipTapEditorWrapper
