@@ -126,12 +126,15 @@ interface NoteState {
 
 class Note extends Component<NoteProps, NoteState> {
   private annotationLayerRef = React.createRef<HTMLDivElement>()
+  private titleRef = React.createRef<HTMLTextAreaElement>()
+  private scrollContainerRef = React.createRef<HTMLDivElement>()
   private initialContent: string = ''
   private analyzer: Analyzer
   private checkpointManager: CheckpointManager
   private debouncedContentLogger: () => void
   private editor: TiptapEditor | null = null
   private hoveredAnnotationElement: HTMLElement | null = null
+  private resizeObserver: ResizeObserver | null = null
 
   constructor(props: NoteProps) {
     super(props)
@@ -303,6 +306,26 @@ class Note extends Component<NoteProps, NoteState> {
 
     // Add hover detection for annotations
     document.addEventListener('mousemove', this.handleAnnotationHover)
+
+    // Resize title textarea on mount
+    this.resizeTitleTextarea()
+
+    // Add ResizeObserver to resize title when container width changes (e.g., sidebar collapse)
+    if (this.scrollContainerRef.current) {
+      this.resizeObserver = new ResizeObserver(() => {
+        this.resizeTitleTextarea()
+      })
+      this.resizeObserver.observe(this.scrollContainerRef.current)
+    }
+  }
+
+  // Auto-resize title textarea to fit content
+  private resizeTitleTextarea = () => {
+    const textarea = this.titleRef.current
+    if (textarea) {
+      textarea.style.height = 'auto'
+      textarea.style.height = textarea.scrollHeight + 'px'
+    }
   }
 
   // Handle annotation hover - only highlight the topmost annotation
@@ -362,6 +385,9 @@ class Note extends Component<NoteProps, NoteState> {
       if (this.editor) {
         setTimeout(() => this.syncMarks(), 0)
       }
+
+      // Resize title for new note
+      setTimeout(() => this.resizeTitleTextarea(), 0)
       return
     }
 
@@ -381,6 +407,12 @@ class Note extends Component<NoteProps, NoteState> {
     if (this.hoveredAnnotationElement) {
       this.hoveredAnnotationElement.classList.remove('annotation-hovered')
       this.hoveredAnnotationElement = null
+    }
+
+    // Clean up resize observer
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect()
+      this.resizeObserver = null
     }
   }
 
@@ -803,55 +835,59 @@ class Note extends Component<NoteProps, NoteState> {
 
     return (
       <div className="editor">
-        <input
-          type="text"
-          className="note-title-input"
-          placeholder="Untitled"
-          value={note.title}
-          onChange={this.handleTitleChange}
-        />
-        <div className="editor-content-wrapper">
-          <div
-            ref={this.annotationLayerRef}
-            className="annotation-layer"
-            aria-hidden
-          >
-            <div className="annotation-overlay-content">
-              {this.renderAnnotationOverlay()}
-            </div>
-            {this.editor && this.props.annotations
-              .filter(ann => ann.annotation.type === 'connection')
-              .map(ann => (
-                <ConnectionAnnotationComponent
-                  key={ann.annotationId}
-                  annotation={ann}
-                  editor={this.editor!}
-                  annotationLayerRef={this.annotationLayerRef}
-                  isPopupOpen={this.state.openAnnotationId === ann.annotationId}
-                  popupPosition={this.state.openAnnotationId === ann.annotationId ? this.state.popupPosition : null}
-                  onPopupOpen={this.handleConnectionPopupOpen}
-                  onPopupClose={this.handleConnectionPopupClose}
-                  onDeleteRecord={this.handleDeleteRecord}
-                />
-              ))
-            }
-          </div>
-                  <TipTapEditorWrapper
-                    initialContent={this.props.note.content || ''}
-                    onEditorReady={(editor) => {
-                      this.editor = editor
-                      // Sync marks from props (single source of truth) on editor ready
-                      if (this.props.annotations.length > 0) {
-                        setTimeout(() => this.syncMarks(), 0)
-                      }
-                      // Force re-render so connection annotations get the editor
-                      this.forceUpdate()
-                    }}
-                    onUpdate={() => {
-                      this.handleContentChange()
-                    }}
-                    onMarkClick={this.handleMarkClick}
+        <div className="editor-scroll-container" ref={this.scrollContainerRef}>
+          <textarea
+            ref={this.titleRef}
+            className="note-title-input"
+            placeholder="Untitled"
+            value={note.title}
+            onChange={this.handleTitleChange}
+            rows={1}
+            onInput={this.resizeTitleTextarea}
+          />
+          <div className="editor-content-wrapper">
+            <div
+              ref={this.annotationLayerRef}
+              className="annotation-layer"
+              aria-hidden
+            >
+              <div className="annotation-overlay-content">
+                {this.renderAnnotationOverlay()}
+              </div>
+              {this.editor && this.props.annotations
+                .filter(ann => ann.annotation.type === 'connection')
+                .map(ann => (
+                  <ConnectionAnnotationComponent
+                    key={ann.annotationId}
+                    annotation={ann}
+                    editor={this.editor!}
+                    annotationLayerRef={this.annotationLayerRef}
+                    isPopupOpen={this.state.openAnnotationId === ann.annotationId}
+                    popupPosition={this.state.openAnnotationId === ann.annotationId ? this.state.popupPosition : null}
+                    onPopupOpen={this.handleConnectionPopupOpen}
+                    onPopupClose={this.handleConnectionPopupClose}
+                    onDeleteRecord={this.handleDeleteRecord}
                   />
+                ))
+              }
+            </div>
+            <TipTapEditorWrapper
+              initialContent={this.props.note.content || ''}
+              onEditorReady={(editor) => {
+                this.editor = editor
+                // Sync marks from props (single source of truth) on editor ready
+                if (this.props.annotations.length > 0) {
+                  setTimeout(() => this.syncMarks(), 0)
+                }
+                // Force re-render so connection annotations get the editor
+                this.forceUpdate()
+              }}
+              onUpdate={() => {
+                this.handleContentChange()
+              }}
+              onMarkClick={this.handleMarkClick}
+            />
+          </div>
         </div>
         {this.state.isAnalyzing && (
           <div className="analysis-spinner">
