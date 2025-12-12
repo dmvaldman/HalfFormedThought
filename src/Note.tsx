@@ -2,7 +2,7 @@ import React, { Component } from 'react'
 import { EditorContent, useEditor, Editor as TiptapEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { AnnotationMark } from './AnnotationMark'
-import { NoteType, ReferenceAnnotation, ListAnnotation, ConnectionAnnotation, TextSpanAnnotation, Checkpoint, getTextSpans } from './types'
+import { NoteType, ReferenceAnnotation, ListAnnotation, TextSpanAnnotation, Checkpoint, getTextSpans } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer, AnnotationResult } from './analyzer'
@@ -10,7 +10,7 @@ import { CheckpointManager } from './CheckpointManager'
 import { AnnotationPopup } from './AnnotationPopup'
 import ReferenceAnnotationContent from './ReferenceAnnotation'
 import ListAnnotationContent from './ListAnnotation'
-import ConnectionLines from './ConnectionLines'
+import ConnectionAnnotationComponent from './ConnectionAnnotation'
 
 // TipTap Editor Wrapper Component (functional component to use hooks)
 interface TipTapEditorWrapperProps {
@@ -46,7 +46,11 @@ const TipTapEditorWrapper: React.FC<TipTapEditorWrapperProps> = ({ initialConten
 
         if (markElement && onMarkClick) {
           const annotationId = markElement.getAttribute('data-annotation-id')
+          const annotationType = markElement.getAttribute('data-annotation-type')
           if (!annotationId) return false
+
+          // Skip connection annotations - they are handled by ConnectionAnnotationComponent
+          if (annotationType === 'connection') return false
 
           // Get the bounding rect of the mark element
           const rect = markElement.getBoundingClientRect()
@@ -612,11 +616,19 @@ class Note extends Component<NoteProps, NoteState> {
     // console.log('Pasted content:', pastedText)
   }
 
-  // Handle click on connection line - open popup at position
-  private handleConnectionClick = (annotationId: string, position: { top: number; left: number }) => {
+  // Handle popup open from connection annotation
+  private handleConnectionPopupOpen = (annotationId: string, position: { top: number; left: number }) => {
     this.setState({
       openAnnotationId: annotationId,
       popupPosition: position
+    })
+  }
+
+  // Handle popup close
+  private handleConnectionPopupClose = () => {
+    this.setState({
+      openAnnotationId: null,
+      popupPosition: null
     })
   }
 
@@ -678,6 +690,11 @@ class Note extends Component<NoteProps, NoteState> {
         let popupLabel: string
         let child: React.ReactElement
 
+        // Connection annotations are rendered separately by ConnectionAnnotationComponent
+        if (annotation.type === 'connection') {
+          return
+        }
+
         if (annotation.type === 'reference') {
           const refAnnotation = annotation as ReferenceAnnotation
           popupLabel = 'Annotations'
@@ -694,15 +711,6 @@ class Note extends Component<NoteProps, NoteState> {
             <ListAnnotationContent
               extensions={listAnnotation.extensions}
               onDeleteExtension={(extensionIndex) => this.handleDeleteExtension(annotationId, extensionIndex)}
-            />
-          )
-        } else if (annotation.type === 'connection') {
-          const connectionAnnotation = annotation as ConnectionAnnotation
-          popupLabel = 'Connection'
-          child = (
-            <ReferenceAnnotationContent
-              records={connectionAnnotation.records}
-              onDeleteRecord={(recordIndex) => this.handleDeleteRecord(annotationId, recordIndex)}
             />
           )
         } else {
@@ -756,13 +764,23 @@ class Note extends Component<NoteProps, NoteState> {
             <div className="annotation-overlay-content">
               {this.renderAnnotationOverlay()}
             </div>
-            <ConnectionLines
-              editor={this.editor}
-              annotations={this.props.annotations}
-              onClick={this.handleConnectionClick}
-              findTextSpan={this.findTextSpan.bind(this)}
-              annotationLayerRef={this.annotationLayerRef}
-            />
+            {this.editor && this.props.annotations
+              .filter(ann => ann.annotation.type === 'connection')
+              .map(ann => (
+                <ConnectionAnnotationComponent
+                  key={ann.annotationId}
+                  annotation={ann}
+                  editor={this.editor!}
+                  annotationLayerRef={this.annotationLayerRef}
+                  findTextSpan={this.findTextSpan.bind(this)}
+                  isPopupOpen={this.state.openAnnotationId === ann.annotationId}
+                  popupPosition={this.state.openAnnotationId === ann.annotationId ? this.state.popupPosition : null}
+                  onPopupOpen={this.handleConnectionPopupOpen}
+                  onPopupClose={this.handleConnectionPopupClose}
+                  onDeleteRecord={this.handleDeleteRecord}
+                />
+              ))
+            }
           </div>
                   <TipTapEditorWrapper
                     initialContent={this.props.note.content || ''}
@@ -772,7 +790,7 @@ class Note extends Component<NoteProps, NoteState> {
                       if (this.props.annotations.length > 0) {
                         setTimeout(() => this.syncMarks(), 0)
                       }
-                      // Force re-render so ConnectionLines gets the editor
+                      // Force re-render so connection annotations get the editor
                       this.forceUpdate()
                     }}
                     onUpdate={() => {

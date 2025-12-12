@@ -79,7 +79,7 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     if (this.state.isPinned) return
 
     const popupElement = this.popupRef.current
-    const target = e.target as HTMLElement
+    const target = e.target as Element
 
     // Check if click is inside popup
     if (popupElement && popupElement.contains(target)) {
@@ -91,6 +91,12 @@ export class AnnotationPopup extends Component<AnnotationPopupProps, AnnotationP
     const markElement = target.closest('span[data-annotation-id]')
     if (markElement) {
       return // Click is on a mark - TipTap will handle it
+    }
+
+    // Check if click is on an SVG path (connection line)
+    // ConnectionAnnotation will handle these clicks
+    if (target.tagName === 'path' || target.closest('svg')) {
+      return // Click is on SVG - ConnectionAnnotation will handle it
     }
 
     // Click is outside popup and not on a mark - close the popup
