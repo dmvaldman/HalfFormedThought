@@ -8,7 +8,7 @@ export interface RecordType {
 
 // Base annotation type (no position needed - marks handle that)
 export interface BaseAnnotation {
-  type: 'reference' | 'list'
+  type: 'reference' | 'list' | 'connection'
 }
 
 // Reference annotation (research sources)
@@ -23,16 +23,27 @@ export interface ListAnnotation extends BaseAnnotation {
   extensions: string[] // Array of 1-4 string extensions
 }
 
+// Connection annotation (links two+ text spans with research sources)
+export interface ConnectionAnnotation extends BaseAnnotation {
+  type: 'connection'
+  records: RecordType[] // Same structure as ReferenceAnnotation
+}
+
 // Union type for all annotations
-export type Annotation = ReferenceAnnotation | ListAnnotation
+export type Annotation = ReferenceAnnotation | ListAnnotation | ConnectionAnnotation
 
 // Text span annotation entry (stored + in-memory representation)
 export interface TextSpanAnnotation {
   annotationId: string
   noteId: string // Which note this annotation belongs to
-  textSpan: string // Exact text that is annotated
+  textSpan: string | string[] // Single for reference/list, array for connection
   annotation: Annotation // Annotation metadata (records/extensions)
   checkpointId?: string // Which checkpoint created this annotation
+}
+
+// Helper to normalize textSpan to always work with arrays
+export function getTextSpans(textSpan: string | string[]): string[] {
+  return Array.isArray(textSpan) ? textSpan : [textSpan]
 }
 
 // Checkpoint for time travel - stores state snapshot

@@ -1,10 +1,58 @@
-import { NoteType, TextSpanAnnotation } from './types'
+import { NoteType, TextSpanAnnotation, RecordType } from './types'
 import mockNoteContent from './mock/mockNoteContent'
+import mockAnnotationsData from './mock/mockAnnotations.json'
 
 const MOCK = import.meta.env.VITE_MOCK === 'true'
 const SHOULD_SAVE_NOTES = import.meta.env.VITE_SAVE_NOTES === 'true'
 const STORAGE_KEY = 'half-formed-thought-notes'
 const ANNOTATIONS_STORAGE_KEY = 'half-formed-thought-annotations'
+
+// Type for raw mock annotation data from JSON
+interface MockAnnotationData {
+  type: 'reference' | 'list' | 'connection'
+  textSpan: string | string[]
+  records?: RecordType[]
+  extensions?: string[]
+}
+
+const MOCK_NOTE_ID = 'mock-note-1'
+
+// Load mock data for development/testing
+function loadMock(): { notes: NoteType[]; annotations: Map<string, TextSpanAnnotation[]> } {
+  const note: NoteType = {
+    id: MOCK_NOTE_ID,
+    title: 'What do AI applications want?',
+    content: mockNoteContent,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+
+  const annotations = new Map<string, TextSpanAnnotation[]>()
+  const mockAnnotations: TextSpanAnnotation[] = (mockAnnotationsData as MockAnnotationData[]).map((data, index) => {
+    let annotation: TextSpanAnnotation['annotation']
+
+    if (data.type === 'reference' && data.records) {
+      annotation = { type: 'reference', records: data.records }
+    } else if (data.type === 'list' && data.extensions) {
+      annotation = { type: 'list', extensions: data.extensions }
+    } else if (data.type === 'connection' && data.records) {
+      annotation = { type: 'connection', records: data.records }
+    } else {
+      annotation = { type: 'reference', records: [] }
+    }
+
+    return {
+      annotationId: `mock-annotation-${index}`,
+      noteId: MOCK_NOTE_ID,
+      textSpan: data.textSpan,
+      annotation
+    }
+  })
+
+  annotations.set(MOCK_NOTE_ID, mockAnnotations)
+
+  return { notes: [note], annotations }
+}
 
 // Migration: extract annotations from old note format and return separately
 function migrateNote(note: any): { note: NoteType; annotations: TextSpanAnnotation[] } {
@@ -27,15 +75,7 @@ function migrateNote(note: any): { note: NoteType; annotations: TextSpanAnnotati
 
 export function loadNotes(): NoteType[] {
   if (MOCK) {
-    const initialNote: NoteType = {
-      id: generateId(),
-      title: 'What do AI applications want?',
-      content: mockNoteContent,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }
-
-    return [initialNote]
+    return loadMock().notes
   }
 
   if (SHOULD_SAVE_NOTES) {
@@ -45,31 +85,22 @@ export function loadNotes(): NoteType[] {
     }
 
     const notes = JSON.parse(stored)
-    // Just return notes, migration happens in loadAll
     return notes.map((n: any) => {
       const { annotations: _, ...cleanNote } = n
       return cleanNote as NoteType
     })
   }
-  else {
-    return []
-  }
+
+  return []
 }
 
 // Load both notes and annotations, handling migration from old format
 export function loadAll(): { notes: NoteType[]; annotations: Map<string, TextSpanAnnotation[]> } {
-  const annotations = new Map<string, TextSpanAnnotation[]>()
-
   if (MOCK) {
-    const initialNote: NoteType = {
-      id: generateId(),
-      title: 'What do AI applications want?',
-      content: mockNoteContent,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }
-    return { notes: [initialNote], annotations }
+    return loadMock()
   }
+
+  const annotations = new Map<string, TextSpanAnnotation[]>()
 
   if (!SHOULD_SAVE_NOTES) {
     return { notes: [], annotations }
@@ -96,7 +127,6 @@ export function loadAll(): { notes: NoteType[]; annotations: Map<string, TextSpa
   const storedAnnotations = localStorage.getItem(ANNOTATIONS_STORAGE_KEY)
   if (storedAnnotations) {
     const parsed = JSON.parse(storedAnnotations) as TextSpanAnnotation[]
-    // Group by noteId
     for (const ann of parsed) {
       const existing = annotations.get(ann.noteId) || []
       existing.push(ann)
@@ -107,7 +137,6 @@ export function loadAll(): { notes: NoteType[]; annotations: Map<string, TextSpa
   // Add migrated annotations (from old format)
   for (const ann of migratedAnnotations) {
     const existing = annotations.get(ann.noteId) || []
-    // Only add if not already present (avoid duplicates after migration)
     if (!existing.some(e => e.annotationId === ann.annotationId)) {
       existing.push(ann)
       annotations.set(ann.noteId, existing)
@@ -117,7 +146,7 @@ export function loadAll(): { notes: NoteType[]; annotations: Map<string, TextSpa
   // If we migrated any annotations, save them in new format and clean old notes
   if (migratedAnnotations.length > 0) {
     saveAnnotations(annotations)
-    saveNotes(notes) // Save notes without embedded annotations
+    saveNotes(notes)
   }
 
   return { notes, annotations }
@@ -131,7 +160,6 @@ export function saveNotes(notes: NoteType[]): void {
 
 export function saveAnnotations(annotations: Map<string, TextSpanAnnotation[]>): void {
   if (SHOULD_SAVE_NOTES) {
-    // Flatten map to array for storage
     const allAnnotations: TextSpanAnnotation[] = []
     annotations.forEach(noteAnnotations => {
       allAnnotations.push(...noteAnnotations)

@@ -7,8 +7,8 @@ const SHOULD_SAVE_MESSAGES = import.meta.env.VITE_SAVE_MESSAGES === 'true'
 
 // Result from a single annotation tool call
 export interface AnnotationResult {
-  type: 'reference' | 'list'
-  textSpan: string
+  type: 'reference' | 'list' | 'connection'
+  textSpan: string | string[] // Single for reference/list, array for connection
   records?: RecordType[]
   extensions?: string[]
 }
@@ -27,6 +27,7 @@ You think in multi-disciplinary analogies, finding provocative insights in the l
 You have access to tools to help you analyze content:
 - Use \`annotate\` to provide annotations for text spans with research sources and insights
 - Use \`extendList\` to extend lists in the document by adding more entries
+- Use \`connectSpans\` to link two text spans that share a meaningful, non-obvious connection. Use sparingly - only for high-confidence connections that reveal genuine insight. Prefer this over annotate() when two specific phrases in the document have a relationship worth highlighting.
 
 When annotating:
 - We're not going for exhaustive coverage. We want to find the most interesting and provocative insights/extensions. Use your discretion and taste.
@@ -138,7 +139,60 @@ const EXTEND_LIST_TOOL = {
   }
 }
 
-const TOOL_DEFINITIONS = [ANNOTATE_TOOL, GET_NOTE_CONTENT_TOOL, EXTEND_LIST_TOOL]
+const CONNECT_SPANS_TOOL = {
+  type: 'function',
+  function: {
+    name: 'connectSpans',
+    description: 'Connect two text spans in the document that share an interesting, non-obvious relationship. Use this sparingly - only for high-confidence connections where the relationship adds genuine insight. Prefer this over annotate() when a meaningful connection exists between two specific phrases in the document. The connection will be visually highlighted and linked.',
+    parameters: {
+      type: 'object',
+      properties: {
+        textSpans: {
+          type: 'array',
+          items: { type: 'string' },
+          minItems: 2,
+          maxItems: 2,
+          description: 'Array of exactly 2 text spans to connect. Each must be an exact string match to the content (no "...", correcting spelling/punctuation). First span should appear before the second in the document.'
+        },
+        records: {
+          type: 'array',
+          minItems: 1,
+          maxItems: 3,
+          description: 'Array of 1-3 record objects explaining how these spans connect, with sources from diverse domains',
+          items: {
+            type: 'object',
+            properties: {
+              description: {
+                type: 'string',
+                description: 'How these two concepts/phrases connect or relate to each other (0-4 sentences)'
+              },
+              title: {
+                type: 'string',
+                description: 'A source that explores this connection (book, essay, paper, etc)'
+              },
+              author: {
+                type: 'string',
+                description: 'The name of the author (optional)'
+              },
+              domain: {
+                type: 'string',
+                description: 'The domain bridging these concepts (history, physics, philosophy, etc)'
+              },
+              search_query: {
+                type: 'string',
+                description: 'A search query to find more about this connection'
+              }
+            },
+            required: ['description', 'title', 'domain', 'search_query']
+          }
+        }
+      },
+      required: ['textSpans', 'records']
+    }
+  }
+}
+
+const TOOL_DEFINITIONS = [ANNOTATE_TOOL, GET_NOTE_CONTENT_TOOL, EXTEND_LIST_TOOL, CONNECT_SPANS_TOOL]
 
 // Analyzer class - returns annotation data instead of mutating state
 export class Analyzer {
@@ -234,9 +288,10 @@ export class Analyzer {
       const mockData = mockAnnotations as any[]
       mockData.forEach(annotation => {
         const result: AnnotationResult = {
-          type: 'reference',
+          type: annotation.type,
           textSpan: annotation.textSpan,
-          records: annotation.records
+          records: annotation.records,
+          extensions: annotation.extensions
         }
         collectedAnnotations.push(result)
         // Notify immediately for progressive updates
@@ -450,6 +505,41 @@ export class Analyzer {
       }
 
       return { success: true, message: 'List extension added' }
+    } else if (functionName === 'connectSpans') {
+      if (!args.textSpans || !Array.isArray(args.textSpans) || args.textSpans.length !== 2) {
+        throw new Error('connectSpans requires exactly 2 text spans')
+      }
+
+      // Clean both text spans
+      const cleanedSpans = args.textSpans.map((span: string) =>
+        span?.trim().replace(/^[.,:;!?]+|[.,:;!?]+$/g, '').trim()
+      )
+
+      if (!cleanedSpans[0] || !cleanedSpans[1]) {
+        throw new Error('One or both text spans are empty after cleaning')
+      }
+
+      if (!args.records || args.records.length === 0) {
+        throw new Error('Records array is empty')
+      }
+
+      console.log('ConnectSpans:', { textSpans: cleanedSpans, records: args.records })
+
+      const annotation: AnnotationResult = {
+        type: 'connection',
+        textSpan: cleanedSpans, // Array of 2 spans
+        records: args.records
+      }
+
+      // Collect the annotation
+      collectedAnnotations.push(annotation)
+
+      // Notify immediately for progressive updates
+      if (onAnnotation) {
+        onAnnotation(this.noteID, annotation)
+      }
+
+      return { success: true, message: 'Connection added' }
     } else {
       throw new Error(`Unknown tool: ${functionName}`)
     }

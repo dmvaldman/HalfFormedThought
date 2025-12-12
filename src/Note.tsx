@@ -2,7 +2,7 @@ import React, { Component } from 'react'
 import { EditorContent, useEditor, Editor as TiptapEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { AnnotationMark } from './AnnotationMark'
-import { NoteType, ReferenceAnnotation, ListAnnotation, TextSpanAnnotation, Checkpoint } from './types'
+import { NoteType, ReferenceAnnotation, ListAnnotation, ConnectionAnnotation, TextSpanAnnotation, Checkpoint, getTextSpans } from './types'
 import { debounce } from './utils'
 import { createPatch } from 'diff'
 import { Analyzer, AnnotationResult } from './analyzer'
@@ -10,6 +10,7 @@ import { CheckpointManager } from './CheckpointManager'
 import { AnnotationPopup } from './AnnotationPopup'
 import ReferenceAnnotationContent from './ReferenceAnnotation'
 import ListAnnotationContent from './ListAnnotation'
+import ConnectionLines from './ConnectionLines'
 
 // TipTap Editor Wrapper Component (functional component to use hooks)
 interface TipTapEditorWrapperProps {
@@ -199,19 +200,27 @@ class Note extends Component<NoteProps, NoteState> {
     const newAnnotations: TextSpanAnnotation[] = []
 
     for (const result of results) {
-      // Only validate textSpan if this is the current note (we have the editor)
+      // Normalize to array for validation
+      const spans = getTextSpans(result.textSpan)
+
+      // Only validate textSpans if this is the current note (we have the editor)
       if (isCurrentNote) {
-        const range = this.findTextSpan(result.textSpan)
-        if (!range) {
-          console.warn('Could not find textSpan in editor:', result.textSpan)
-          continue
+        let allSpansFound = true
+        for (const span of spans) {
+          const range = this.findTextSpan(span)
+          if (!range) {
+            console.warn('Could not find textSpan in editor:', span)
+            allSpansFound = false
+            break
+          }
         }
+        if (!allSpansFound) continue
       }
 
       // Generate unique ID for this annotation
       const annotationId = `annotation-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 
-      let annotation: ReferenceAnnotation | ListAnnotation
+      let annotation: ReferenceAnnotation | ListAnnotation | ConnectionAnnotation
 
       if (result.type === 'reference' && result.records) {
         annotation = {
@@ -222,6 +231,11 @@ class Note extends Component<NoteProps, NoteState> {
         annotation = {
           type: 'list',
           extensions: result.extensions
+        }
+      } else if (result.type === 'connection' && result.records) {
+        annotation = {
+          type: 'connection',
+          records: result.records
         }
       } else {
         console.warn('Invalid annotation result:', result)
@@ -257,16 +271,21 @@ class Note extends Component<NoteProps, NoteState> {
 
     // Reapply marks for all annotations from props
     this.props.annotations.forEach(({ annotationId, textSpan, annotation }) => {
-      const range = this.findTextSpan(textSpan)
-      if (range) {
-        this.editor!.chain()
-          .setTextSelection({ from: range.from, to: range.to })
-          .setMark('annotation', {
-            annotationId,
-            type: annotation.type
-          })
-          .setTextSelection(range.to)
-          .run()
+      // Handle both single and multiple text spans
+      const spans = getTextSpans(textSpan)
+
+      for (const span of spans) {
+        const range = this.findTextSpan(span)
+        if (range) {
+          this.editor!.chain()
+            .setTextSelection({ from: range.from, to: range.to })
+            .setMark('annotation', {
+              annotationId,
+              type: annotation.type
+            })
+            .setTextSelection(range.to)
+            .run()
+        }
       }
     })
   }
@@ -593,6 +612,14 @@ class Note extends Component<NoteProps, NoteState> {
     // console.log('Pasted content:', pastedText)
   }
 
+  // Handle click on connection line - open popup at position
+  private handleConnectionClick = (annotationId: string, position: { top: number; left: number }) => {
+    this.setState({
+      openAnnotationId: annotationId,
+      popupPosition: position
+    })
+  }
+
   // Render annotations by reading marks from the document
   renderAnnotationOverlay(): React.ReactNode {
     if (!this.editor || this.props.annotations.length === 0) {
@@ -669,6 +696,15 @@ class Note extends Component<NoteProps, NoteState> {
               onDeleteExtension={(extensionIndex) => this.handleDeleteExtension(annotationId, extensionIndex)}
             />
           )
+        } else if (annotation.type === 'connection') {
+          const connectionAnnotation = annotation as ConnectionAnnotation
+          popupLabel = 'Connection'
+          child = (
+            <ReferenceAnnotationContent
+              records={connectionAnnotation.records}
+              onDeleteRecord={(recordIndex) => this.handleDeleteRecord(annotationId, recordIndex)}
+            />
+          )
         } else {
           return // Skip unknown types
         }
@@ -720,6 +756,12 @@ class Note extends Component<NoteProps, NoteState> {
             <div className="annotation-overlay-content">
               {this.renderAnnotationOverlay()}
             </div>
+            <ConnectionLines
+              editor={this.editor}
+              annotations={this.props.annotations}
+              onClick={this.handleConnectionClick}
+              findTextSpan={this.findTextSpan.bind(this)}
+            />
           </div>
                   <TipTapEditorWrapper
                     initialContent={this.props.note.content || ''}

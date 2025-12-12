@@ -2,7 +2,7 @@ import { Mark } from '@tiptap/core'
 
 export interface AnnotationMarkAttributes {
   annotationId: string
-  type: 'reference' | 'list'
+  type: 'reference' | 'list' | 'connection'
 }
 
 export const AnnotationMark = Mark.create({
@@ -24,7 +24,7 @@ export const AnnotationMark = Mark.create({
       },
       type: {
         default: null,
-        parseHTML: element => element.getAttribute('data-annotation-type') as 'reference' | 'list' | null,
+        parseHTML: element => element.getAttribute('data-annotation-type') as 'reference' | 'list' | 'connection' | null,
         renderHTML: attributes => {
           if (!attributes.type) {
             return {}
@@ -55,6 +55,8 @@ export const AnnotationMark = Mark.create({
       style.backgroundColor = 'rgba(100, 100, 100, 0.25)'
     } else if (type === 'list') {
       style.backgroundColor = 'rgba(255, 68, 68, 0.25)'
+    } else if (type === 'connection') {
+      style.backgroundColor = 'rgba(97, 218, 251, 0.25)' // Blue (accent-cyan)
     }
 
     // Convert style object to string
