@@ -23,14 +23,28 @@ interface ConnectionLinesProps {
 
 interface ConnectionLinesState {
   hoveredConnectionId: string | null
+  resizeKey: number // Force re-render on window resize
 }
 
-// How far into the left margin the gutter line goes
-const GUTTER_OFFSET = 20
+// How far into the left margin the gutter line goes (from left edge of editor content area)
+const GUTTER_OFFSET = -20
 
 class ConnectionLines extends Component<ConnectionLinesProps, ConnectionLinesState> {
   state: ConnectionLinesState = {
-    hoveredConnectionId: null
+    hoveredConnectionId: null,
+    resizeKey: 0
+  }
+
+  private resizeHandler = () => {
+    this.setState(state => ({ resizeKey: state.resizeKey + 1 }))
+  }
+
+  componentDidMount() {
+    window.addEventListener('resize', this.resizeHandler)
+  }
+
+  componentWillUnmount() {
+    window.removeEventListener('resize', this.resizeHandler)
   }
 
   // Get the bounding rect for a text span in document coordinates
@@ -144,6 +158,7 @@ class ConnectionLines extends Component<ConnectionLinesProps, ConnectionLinesSta
   render() {
     const { editor } = this.props
     const { hoveredConnectionId } = this.state
+
     if (!editor) return null
 
     const geometries = this.getConnectionGeometries()
@@ -182,8 +197,9 @@ class ConnectionLines extends Component<ConnectionLinesProps, ConnectionLinesSta
             const x2 = span2.left
             const y2 = span2.top
 
-            // Gutter x position (to the left of both spans)
-            const gutterX = Math.min(x1, x2) - GUTTER_OFFSET
+            // Gutter x position: always in the left margin (negative X relative to editor content)
+            // This ensures the line goes into the margin and never cuts through text
+            const gutterX = -GUTTER_OFFSET
 
             // Path: from span1 bottom-left -> notch left to gutter -> down -> notch right to span2 top-left
             pathD = `M ${x1} ${y1} L ${gutterX} ${y1} L ${gutterX} ${y2} L ${x2} ${y2}`
