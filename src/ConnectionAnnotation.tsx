@@ -249,14 +249,19 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
       span2 = temp
     }
 
-    const strokeColor = isHovered ? '#61dafb' : 'rgba(97, 218, 251, 0.6)'
+    // Match the span highlight colors exactly
+    const strokeColor = isHovered ? 'rgba(97, 218, 251, 0.4)' : 'rgba(97, 218, 251, 0.25)'
     const strokeWidth = isHovered ? 2 : 1.5
 
     let pathD: string
 
+    // Length of the 45-degree tick at each endpoint
+    const tickLen = 2
+
     if (sameLine) {
       const y = span1.bottom - 1
-      pathD = `M ${span1.right} ${y} L ${span2.left} ${y}`
+      // Main line with 45-deg ticks going up-right at each end
+      pathD = `M ${span1.right - tickLen} ${y + tickLen} L ${span1.right} ${y} L ${span2.left} ${y} L ${span2.left + tickLen} ${y - tickLen}`
     } else {
       const x1 = span1.left
       const y1 = span1.bottom + 1
@@ -266,7 +271,8 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
       const contentLeftEdge = this.getContentLeftEdge()
       const gutterX = contentLeftEdge - GUTTER_MARGIN
 
-      pathD = `M ${x1} ${y1} L ${gutterX} ${y1} L ${gutterX} ${y2} L ${x2} ${y2}`
+      // Segmented path with 45-deg ticks going up-right at each end
+      pathD = `M ${x1 + tickLen} ${y1 - tickLen} L ${x1} ${y1} L ${gutterX} ${y1} L ${gutterX} ${y2} L ${x2} ${y2} L ${x2 + tickLen} ${y2 - tickLen}`
     }
 
     return (
@@ -316,13 +322,6 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
 
   private renderPopup(): React.ReactNode {
     const { annotation, isPopupOpen, popupPosition, onPopupClose, onDeleteRecord } = this.props
-
-    console.log('[ConnectionAnnotation] renderPopup', {
-      annotationId: annotation.annotationId,
-      isPopupOpen,
-      popupPosition,
-      type: annotation.annotation.type
-    })
 
     if (annotation.annotation.type !== 'connection') return null
 
