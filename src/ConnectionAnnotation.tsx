@@ -21,9 +21,6 @@ interface ConnectionAnnotationState {
   isReady: boolean // True once marks are laid out in DOM
 }
 
-// Delay before unhover (allows time to move between span and line)
-const UNHOVER_DELAY = 50
-
 // How far into the left margin the gutter line extends
 const GUTTER_MARGIN = 12
 
@@ -34,53 +31,30 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     isReady: false
   }
 
-  private unhoverTimeout: ReturnType<typeof setTimeout> | null = null
-
   private resizeHandler = () => {
     this.setState(prev => ({ resizeKey: prev.resizeKey + 1 }))
-  }
-
-  private cancelUnhover = () => {
-    if (this.unhoverTimeout) {
-      clearTimeout(this.unhoverTimeout)
-      this.unhoverTimeout = null
-    }
-  }
-
-  private scheduleUnhover = () => {
-    this.cancelUnhover()
-    this.unhoverTimeout = setTimeout(() => {
-      this.unhoverTimeout = null
-      this.setHovered(false)
-    }, UNHOVER_DELAY)
   }
 
   private handleMouseEnterSpan = (event: Event) => {
     const target = event.target as HTMLElement
     const markElement = target.closest('span[data-annotation-id]') as HTMLElement | null
-    if (!markElement) return // Not entering any annotation span
+    if (!markElement) return
 
     const foundId = markElement.getAttribute('data-annotation-id')
-    const myId = this.props.annotation.annotationId
+    if (foundId !== this.props.annotation.annotationId) return
 
-    if (foundId !== myId) return // Not our annotation
-
-    this.cancelUnhover()
     this.setHovered(true)
   }
 
   private handleMouseLeaveSpan = (event: Event) => {
     const target = event.target as HTMLElement
     const markElement = target.closest('span[data-annotation-id]') as HTMLElement | null
-    if (!markElement) return // Not leaving any annotation span
+    if (!markElement) return
 
     const foundId = markElement.getAttribute('data-annotation-id')
-    const myId = this.props.annotation.annotationId
+    if (foundId !== this.props.annotation.annotationId) return
 
-    if (foundId !== myId) return // Not our annotation
-
-    // Schedule unhover with delay - if we enter another element of this connection, it will cancel
-    this.scheduleUnhover()
+    this.setHovered(false)
   }
 
   private handleSpanClick = (event: Event) => {
@@ -131,9 +105,6 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     editorDom.removeEventListener('click', this.handleSpanClick)
 
     window.removeEventListener('resize', this.resizeHandler)
-
-    // Clean up
-    this.cancelUnhover()
   }
 
   private setHovered(isHovered: boolean) {
@@ -158,14 +129,11 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
   }
 
   private handleLineMouseEnter = () => {
-    this.cancelUnhover()
-    if (!this.state.isHovered) {
-      this.setHovered(true)
-    }
+    this.setHovered(true)
   }
 
   private handleLineMouseLeave = () => {
-    this.scheduleUnhover()
+    this.setHovered(false)
   }
 
   private handleLineClick = (event: React.MouseEvent) => {
