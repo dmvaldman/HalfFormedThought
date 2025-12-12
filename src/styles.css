@@ -12,6 +12,20 @@
   --accent-cyan: #61dafb;
   --accent-red: #ff4444;
 
+  /* Annotation colors - normal and hover states */
+  --reference-color: rgba(139, 138, 138, 0.25);
+  --reference-color-hover: rgba(135, 135, 135, 0.6);
+
+  --list-color: rgba(255, 68, 68, 0.25);
+  --list-color-hover: rgba(255, 68, 68, 0.6);
+
+  --connection-color: rgba(97, 218, 251, 0.25);
+  --connection-color-hover: rgba(97, 218, 251, 0.6);
+
+  /* Transitions */
+  --hover-transition-in: 0.2s ease;
+  --hover-transition-out: 0.5s ease;
+
   /* Shadow */
   --shadow-dark: rgba(0, 0, 0, 0.3);
 }
@@ -321,24 +335,42 @@ button {
 /* Annotation marks are styled inline by TipTap, but we can add hover effects */
 .editor-content span[data-annotation-id] {
   cursor: pointer;
-  transition: background-color 0.2s ease, opacity 0.2s ease, filter 0.15s ease;
+  transition: background-color var(--hover-transition-out);
   border-radius: 2px;
 }
 
-.editor-content span[data-annotation-id]:hover {
-  opacity: 1;
-  filter: brightness(1.3);
+/* Hover states for each annotation type */
+.editor-content span[data-annotation-type="reference"]:hover {
+  background-color: var(--reference-color-hover) !important;
+  transition: background-color var(--hover-transition-in);
+}
+
+.editor-content span[data-annotation-type="list"]:hover {
+  background-color: var(--list-color-hover) !important;
+  transition: background-color var(--hover-transition-in);
+}
+
+.editor-content span[data-annotation-type="connection"]:hover {
+  background-color: var(--connection-color-hover) !important;
+  transition: background-color var(--hover-transition-in);
 }
 
 /* Connection highlight sync - when a connection line is hovered, brighten its spans */
 .editor-content span[data-annotation-id].connection-hovered {
-  filter: brightness(1.5);
-  background-color: rgba(97, 218, 251, 0.4) !important;
+  background-color: var(--connection-color-hover) !important;
 }
 
-/* Connection lines SVG layer */
-.connection-lines-svg {
-  z-index: 10;
+/* Connection lines SVG */
+.connection-line {
+  stroke: var(--connection-color);
+  stroke-width: 1.5;
+  transition: stroke var(--hover-transition-out), stroke-width var(--hover-transition-out);
+}
+
+.connection-line-hovered {
+  stroke: var(--connection-color-hover);
+  stroke-width: 2;
+  transition: stroke var(--hover-transition-in), stroke-width var(--hover-transition-in);
 }
 
 .annotation-popup {

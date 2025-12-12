@@ -141,6 +141,7 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
   }
 
   // Render a dynamic style tag to highlight spans - survives TipTap re-renders
+  // Uses same color as SVG line hover state
   private renderHoverStyle(): React.ReactNode {
     const { annotation } = this.props
     const { isHovered } = this.state
@@ -149,8 +150,7 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
 
     const css = `
       span[data-annotation-id="${annotation.annotationId}"] {
-        filter: brightness(1.5) !important;
-        background-color: rgba(97, 218, 251, 0.4) !important;
+        background-color: var(--connection-color-hover) !important;
       }
     `
 
@@ -249,9 +249,7 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
       span2 = temp
     }
 
-    // Match the span highlight colors exactly
-    const strokeColor = isHovered ? 'rgba(97, 218, 251, 0.4)' : 'rgba(97, 218, 251, 0.25)'
-    const strokeWidth = isHovered ? 2 : 1.5
+    const lineClassName = isHovered ? 'connection-line connection-line-hovered' : 'connection-line'
 
     let pathD: string
 
@@ -306,15 +304,11 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
         {/* Visible path */}
         <path
           d={pathD}
-          stroke={strokeColor}
-          strokeWidth={strokeWidth}
+          className={lineClassName}
           fill="none"
           strokeLinecap="round"
           strokeLinejoin="round"
-          style={{
-            pointerEvents: 'none',
-            transition: 'stroke 0.15s ease, stroke-width 0.15s ease'
-          }}
+          style={{ pointerEvents: 'none' }}
         />
       </svg>
     )

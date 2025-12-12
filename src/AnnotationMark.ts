@@ -44,17 +44,17 @@ function createAnnotationMark(name: string, backgroundColor: string) {
 // Individual mark types - can overlap because they're different mark types
 export const ReferenceAnnotationMark = createAnnotationMark(
   'reference',
-  'rgba(100, 100, 100, 0.25)'
+  'var(--reference-color)'
 )
 
 export const ListAnnotationMark = createAnnotationMark(
   'list',
-  'rgba(255, 68, 68, 0.25)'
+  'var(--list-color)'
 )
 
 export const ConnectionAnnotationMark = createAnnotationMark(
   'connection',
-  'rgba(97, 218, 251, 0.25)'
+  'var(--connection-color)'
 )
 
 // Export all marks as an array for easy registration
