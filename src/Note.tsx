@@ -567,16 +567,19 @@ class Note extends Component<NoteProps, NoteState> {
   handleDeleteRecord = (annotationId: string, recordIndex: number) => {
     const annotationsMap = this.getAnnotationsMap()
     const entry = annotationsMap.get(annotationId)
-    if (entry && entry.annotation.type === 'reference') {
-      const refAnnotation = entry.annotation as ReferenceAnnotation
-      const newRecords = refAnnotation.records.filter((_, i) => i !== recordIndex)
+    if (!entry) return
+
+    // Handle both 'reference' and 'connection' types (both have records)
+    if (entry.annotation.type === 'reference' || entry.annotation.type === 'connection') {
+      const annotation = entry.annotation as ReferenceAnnotation // ConnectionAnnotation has same records structure
+      const newRecords = annotation.records.filter((_, i) => i !== recordIndex)
       if (newRecords.length === 0) {
         // If no records left, delete the entire annotation
         this.handleDeleteAnnotation(annotationId)
       } else {
         // Update the annotation with remaining records
-        const updatedAnnotation: ReferenceAnnotation = {
-          ...refAnnotation,
+        const updatedAnnotation = {
+          ...annotation,
           records: newRecords
         }
         this.updateAnnotation(annotationId, {
