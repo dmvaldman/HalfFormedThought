@@ -22,7 +22,7 @@ interface ConnectionAnnotationState {
 }
 
 // How far into the left margin the gutter line extends
-const GUTTER_MARGIN = 12
+const GUTTER_MARGIN = 6
 
 class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps, ConnectionAnnotationState> {
   state: ConnectionAnnotationState = {
@@ -222,17 +222,18 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     let pathD: string
 
     // Length of the 45-degree tick at each endpoint
-    const tickLen = 2
+    const tickLen = 3
 
     if (sameLine) {
-      const y = span1.bottom - 1
-      // Main line with 45-deg ticks going up-right at each end
-      pathD = `M ${span1.right - tickLen} ${y + tickLen} L ${span1.right} ${y} L ${span2.left} ${y} L ${span2.left + tickLen} ${y - tickLen}`
+      const y = span1.bottom + 3
+      // Line from span1 bottom-right to span2 bottom-left
+      // First tick: "\" direction (down-left to down-right), second tick: "/" direction (up-left to up-right)
+      pathD = `M ${span1.right - tickLen} ${y - tickLen} L ${span1.right} ${y} L ${span2.left} ${y} L ${span2.left + tickLen} ${y - tickLen}`
     } else {
       const x1 = span1.left
-      const y1 = span1.bottom + 2
+      const y1 = span1.bottom + 3
       const x2 = span2.left
-      const y2 = span2.bottom + 2
+      const y2 = span2.bottom + 3
 
       const contentLeftEdge = this.getContentLeftEdge()
       const gutterX = contentLeftEdge - GUTTER_MARGIN
