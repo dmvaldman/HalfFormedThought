@@ -131,6 +131,7 @@ class Note extends Component<NoteProps, NoteState> {
   private checkpointManager: CheckpointManager
   private debouncedContentLogger: () => void
   private editor: TiptapEditor | null = null
+  private hoveredAnnotationElement: HTMLElement | null = null
 
   constructor(props: NoteProps) {
     super(props)
@@ -299,6 +300,45 @@ class Note extends Component<NoteProps, NoteState> {
   componentDidMount() {
     const initial = this.props.note.content || ''
     this.initialContent = initial
+
+    // Add hover detection for annotations
+    document.addEventListener('mousemove', this.handleAnnotationHover)
+  }
+
+  // Handle annotation hover - only highlight the topmost annotation
+  private handleAnnotationHover = (event: MouseEvent) => {
+    // Guard against editor not being ready
+    if (!this.editor || !this.editor.view) return
+
+    const editorDom = this.editor.view.dom
+    if (!editorDom) return
+    if (!editorDom.contains(event.target as Node)) {
+      // Mouse is outside editor - clear any hover
+      if (this.hoveredAnnotationElement) {
+        this.hoveredAnnotationElement.classList.remove('annotation-hovered')
+        this.hoveredAnnotationElement = null
+      }
+      return
+    }
+
+    // Find the topmost annotation element at this point
+    const target = event.target as HTMLElement
+    const annotationMark = target.closest('.annotation-mark') as HTMLElement | null
+
+    // If we're hovering the same element, do nothing
+    if (annotationMark === this.hoveredAnnotationElement) return
+
+    // Remove hover from previous element
+    if (this.hoveredAnnotationElement) {
+      this.hoveredAnnotationElement.classList.remove('annotation-hovered')
+    }
+
+    // Add hover to new element
+    if (annotationMark) {
+      annotationMark.classList.add('annotation-hovered')
+    }
+
+    this.hoveredAnnotationElement = annotationMark
   }
 
   componentDidUpdate(prevProps: NoteProps, prevState: NoteState) {
@@ -335,6 +375,13 @@ class Note extends Component<NoteProps, NoteState> {
   componentWillUnmount() {
     // Don't abort analyzer on unmount - let background analysis complete
     // Results will still be routed correctly via App's handleUpdateAnnotations
+
+    // Clean up hover detection
+    document.removeEventListener('mousemove', this.handleAnnotationHover)
+    if (this.hoveredAnnotationElement) {
+      this.hoveredAnnotationElement.classList.remove('annotation-hovered')
+      this.hoveredAnnotationElement = null
+    }
   }
 
   shouldComponentUpdate(nextProps: NoteProps, nextState: NoteState) {

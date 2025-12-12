@@ -121,19 +121,23 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     this.setState({ isHovered })
   }
 
-  // Add/remove hover class on spans when line is hovered
-  componentDidUpdate(_prevProps: ConnectionAnnotationProps, prevState: ConnectionAnnotationState) {
-    if (prevState.isHovered !== this.state.isHovered) {
-      const { annotation } = this.props
-      const spans = document.querySelectorAll(`span[data-annotation-id="${annotation.annotationId}"]`)
-      spans.forEach(span => {
-        if (this.state.isHovered) {
-          span.classList.add('connection-hovered')
-        } else {
-          span.classList.remove('connection-hovered')
-        }
-      })
-    }
+  // Render a dynamic style tag that activates hover styles for this annotation
+  // The actual styles are defined in CSS - we just add a selector that matches
+  private renderHoverStyle(): React.ReactNode {
+    const { annotation } = this.props
+    const { isHovered } = this.state
+
+    if (!isHovered) return null
+
+    // Use attribute selector to match, styles defined in CSS
+    const css = `
+      .annotation-mark-connection[data-annotation-id="${annotation.annotationId}"] {
+        background-color: var(--connection-color-hover);
+        border-color: var(--connection-color-hover);
+      }
+    `
+
+    return <style dangerouslySetInnerHTML={{ __html: css }} />
   }
 
   private handleLineMouseEnter = () => {
@@ -318,6 +322,7 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
   render() {
     return (
       <>
+        {this.renderHoverStyle()}
         {this.renderLine()}
         {this.renderPopup()}
       </>

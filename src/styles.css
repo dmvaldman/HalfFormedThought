@@ -401,29 +401,23 @@ button {
   border: 1px solid var(--connection-color);
 }
 
-/* Hover states for each annotation type */
-.annotation-mark-reference:hover {
+/* Hover states for each annotation type - controlled via JS class */
+.annotation-mark-reference.annotation-hovered {
   background-color: var(--reference-color-hover);
   border-color: var(--reference-color-hover);
   transition: background-color var(--hover-transition-in), border-color var(--hover-transition-in);
 }
 
-.annotation-mark-list:hover {
+.annotation-mark-list.annotation-hovered {
   background-color: var(--list-color-hover);
   border-color: var(--list-color-hover);
   transition: background-color var(--hover-transition-in), border-color var(--hover-transition-in);
 }
 
-.annotation-mark-connection:hover {
+.annotation-mark-connection.annotation-hovered {
   background-color: var(--connection-color-hover);
   border-color: var(--connection-color-hover);
   transition: background-color var(--hover-transition-in), border-color var(--hover-transition-in);
-}
-
-/* Connection highlight sync - when a connection line is hovered, brighten its spans */
-.annotation-mark-connection.connection-hovered {
-  background-color: var(--connection-color-hover);
-  border-color: var(--connection-color-hover);
 }
 
 /* Connection lines SVG */
