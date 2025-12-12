@@ -77,6 +77,8 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     onPopupOpen(annotation.annotationId, position)
   }
 
+  private resizeObserver: ResizeObserver | null = null
+
   componentDidMount() {
     const { editor } = this.props
     const editorDom = editor.view.dom
@@ -87,8 +89,13 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     // Add click listener for spans
     editorDom.addEventListener('click', this.handleSpanClick)
 
-    // Add resize listener
-    window.addEventListener('resize', this.resizeHandler)
+    // Add ResizeObserver for the editor-content-wrapper
+    // Catches both window resizes and sidebar collapse/expand
+    const editorWrapper = editorDom.closest('.editor-content-wrapper')
+    this.resizeObserver = new ResizeObserver(this.resizeHandler)
+    if (editorWrapper) {
+      this.resizeObserver.observe(editorWrapper)
+    }
 
     // Wait for DOM layout before rendering SVG lines (avoids flicker)
     requestAnimationFrame(() => {
@@ -104,7 +111,10 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     editorDom.removeEventListener('mouseout', this.handleMouseLeaveSpan)
     editorDom.removeEventListener('click', this.handleSpanClick)
 
-    window.removeEventListener('resize', this.resizeHandler)
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect()
+      this.resizeObserver = null
+    }
   }
 
   private setHovered(isHovered: boolean) {

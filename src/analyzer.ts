@@ -143,7 +143,7 @@ const CONNECT_SPANS_TOOL = {
   type: 'function',
   function: {
     name: 'connectSpans',
-    description: 'Connect two text spans in the document that share an interesting, non-obvious relationship. Use this sparingly - only for high-confidence connections where the relationship adds genuine insight. Prefer this over annotate() when a meaningful connection exists between two specific phrases in the document. The connection will be visually highlighted and linked.',
+    description: 'Connect two text spans in the document that share an interesting, non-obvious relationship. Use this sparingly - only for high-confidence connections where the relationship adds genuine insight. Prefer this over annotate() when a meaningful connection exists between two specific phrases in the document.',
     parameters: {
       type: 'object',
       properties: {
