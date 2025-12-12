@@ -87,12 +87,12 @@
   },
   {
     "type": "list",
-    "textSpan": "documentation over institutional memory, artifacts over processes, snapshots over streams",
+    "textSpan": "Sensory sources (text, images, audio, video)",
     "extensions": [
-      "schemas over tribal knowledge",
-      "versioned configs over oral tradition",
-      "explicit contracts over implicit conventions",
-      "immutable logs over mutable state"
+      "code repositories",
+      "structured databases",
+      "API responses",
+      "log files and telemetry"
     ]
   }
 ]
