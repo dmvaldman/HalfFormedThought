@@ -771,6 +771,8 @@ class Note extends Component<NoteProps, NoteState> {
                       if (this.props.annotations.length > 0) {
                         setTimeout(() => this.syncMarks(), 0)
                       }
+                      // Force re-render so ConnectionLines gets the editor
+                      this.forceUpdate()
                     }}
                     onUpdate={() => {
                       this.handleContentChange()
