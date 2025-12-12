@@ -1,5 +1,7 @@
 import { Component } from 'react'
 import { NoteType } from './types'
+import collapseIcon from '../assets/collapse.svg'
+import expandIcon from '../assets/expand.svg'
 
 interface SidebarProps {
   notes: NoteType[]
@@ -34,7 +36,7 @@ class Sidebar extends Component<SidebarProps, SidebarState> {
           onClick={this.handleToggleCollapse}
           title="Expand sidebar"
         >
-          ☰
+          <img src={expandIcon} alt="Expand sidebar" />
         </button>
       )
     }
@@ -50,7 +52,7 @@ class Sidebar extends Component<SidebarProps, SidebarState> {
             onClick={this.handleToggleCollapse}
             title="Collapse sidebar"
           >
-            ‹
+            <img src={collapseIcon} alt="Collapse sidebar" />
           </button>
         </div>
         <div className="notes-list">
