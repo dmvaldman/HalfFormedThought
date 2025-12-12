@@ -25,7 +25,7 @@ interface ConnectionAnnotationState {
 const UNHOVER_DELAY = 50
 
 // How far into the left margin the gutter line extends
-const GUTTER_MARGIN = 20
+const GUTTER_MARGIN = 12
 
 class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps, ConnectionAnnotationState> {
   state: ConnectionAnnotationState = {
@@ -255,13 +255,13 @@ class ConnectionAnnotationComponent extends Component<ConnectionAnnotationProps,
     let pathD: string
 
     if (sameLine) {
-      const y = span1.bottom - 2
+      const y = span1.bottom - 1
       pathD = `M ${span1.right} ${y} L ${span2.left} ${y}`
     } else {
       const x1 = span1.left
-      const y1 = span1.bottom
+      const y1 = span1.bottom + 1
       const x2 = span2.left
-      const y2 = span2.bottom
+      const y2 = span2.bottom + 1
 
       const contentLeftEdge = this.getContentLeftEdge()
       const gutterX = contentLeftEdge - GUTTER_MARGIN
